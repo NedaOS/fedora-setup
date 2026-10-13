@@ -1,0 +1,17 @@
+---
+copr_repositories:
+  - name: lionheartp/Hyprland
+  - name: lihaohong/yazi
+
+rpmfusion:
+  enabled: true
+
+vendor_repositories:
+  brave:
+    enabled: true
+    repo_url: https://brave-browser-rpm-release.s3.brave.com/brave-browser.repo
+
+  vscode:
+    enabled: true
+    repo_url: https://packages.microsoft.com/yumrepos/vscode
+    gpg_key_url: https://packages.microsoft.com/keys/microsoft.asc

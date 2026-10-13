@@ -1,0 +1,11 @@
+---
+cliamp:
+  enabled: true
+
+onionhop_cli:
+  enabled: true
+  version: "3.8.6"
+
+fnm:
+  enabled: true
+  node_version: "24.21.0"

@@ -1,0 +1,162 @@
+---
+- name: Manage manually installed tools
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: true
+
+  vars_files:
+    - ../vars/manually.yml
+
+  vars:
+    user_home: "{{ ansible_facts['env']['HOME'] }}"
+    user_bin_dir: "{{ user_home }}/.local/bin"
+    user_opt_dir: "{{ user_home }}/.local/opt"
+    user_cache_dir: "{{ user_home }}/.cache"
+
+  tasks:
+    - name: Ensure user directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ user_bin_dir }}"
+        - "{{ user_opt_dir }}"
+        - "{{ user_cache_dir }}"
+
+    # cliamp
+    - name: Check whether cliamp is installed
+      ansible.builtin.stat:
+        path: "{{ user_bin_dir }}/cliamp"
+      register: cliamp_binary
+      when: cliamp.enabled | bool
+
+    - name: Download cliamp installer
+      ansible.builtin.get_url:
+        url: https://cliamp.stream/install.sh
+        dest: "{{ user_cache_dir }}/cliamp-install.sh"
+        mode: "0644"
+      when:
+        - cliamp.enabled | bool
+        - not cliamp_binary.stat.exists
+
+    - name: Install cliamp
+      ansible.builtin.command:
+        argv:
+          - sh
+          - "{{ user_cache_dir }}/cliamp-install.sh"
+      args:
+        creates: "{{ user_bin_dir }}/cliamp"
+      when:
+        - cliamp.enabled | bool
+        - not cliamp_binary.stat.exists
+
+    # fnm
+    - name: Check whether fnm is installed
+      ansible.builtin.stat:
+        path: "{{ user_home }}/.local/share/fnm/fnm"
+      register: fnm_binary
+      when: fnm.enabled | bool
+
+    - name: Download fnm installer
+      ansible.builtin.get_url:
+        url: https://fnm.vercel.app/install
+        dest: "{{ user_cache_dir }}/fnm-install.sh"
+        mode: "0644"
+      when:
+        - fnm.enabled | bool
+        - not fnm_binary.stat.exists
+
+    - name: Install fnm
+      ansible.builtin.command:
+        argv:
+          - bash
+          - "{{ user_cache_dir }}/fnm-install.sh"
+      args:
+        creates: "{{ user_home }}/.local/share/fnm/fnm"
+      when:
+        - fnm.enabled | bool
+        - not fnm_binary.stat.exists
+
+    - name: Check installed Node.js versions
+      ansible.builtin.command:
+        argv:
+          - "{{ user_home }}/.local/share/fnm/fnm"
+          - list
+      register: fnm_versions
+      changed_when: false
+      when:
+        - fnm.enabled | bool
+        - fnm_binary.stat.exists or
+          (fnm_install_result is defined and fnm_install_result is succeeded)
+
+    - name: Install requested Node.js version
+      ansible.builtin.command:
+        argv:
+          - "{{ user_home }}/.local/share/fnm/fnm"
+          - install
+          - "{{ fnm.node_version }}"
+      register: fnm_node_install
+      changed_when: true
+      when:
+        - fnm.enabled | bool
+        - "'v' ~ fnm.node_version not in fnm_versions.stdout"
+
+    # OnionHop CLI
+    - name: Define OnionHop paths
+      ansible.builtin.set_fact:
+        onionhop_archive_name: "OnionHopCLI-{{ onionhop_cli.version }}-linux-x64.tar.gz"
+        onionhop_install_dir: "{{ user_opt_dir }}/onionhop/{{ onionhop_cli.version }}"
+        onionhop_archive_path: "{{ user_cache_dir }}/OnionHopCLI-{{ onionhop_cli.version }}-linux-x64.tar.gz"
+      when: onionhop_cli.enabled | bool
+
+    - name: Ensure OnionHop installation directory exists
+      ansible.builtin.file:
+        path: "{{ onionhop_install_dir }}"
+        state: directory
+        mode: "0755"
+      when: onionhop_cli.enabled | bool
+
+    - name: Check whether OnionHop archive is cached
+      ansible.builtin.stat:
+        path: "{{ onionhop_archive_path }}"
+      register: onionhop_archive
+      when: onionhop_cli.enabled | bool
+
+    - name: Download OnionHop CLI archive
+      ansible.builtin.get_url:
+        url: "https://github.com/center2055/OnionHop/releases/download/v{{ onionhop_cli.version }}/{{ onionhop_archive_name }}"
+        dest: "{{ onionhop_archive_path }}"
+        mode: "0644"
+      when:
+        - onionhop_cli.enabled | bool
+        - not onionhop_archive.stat.exists
+
+    - name: Extract OnionHop CLI
+      ansible.builtin.unarchive:
+        src: "{{ onionhop_archive_path }}"
+        dest: "{{ onionhop_install_dir }}"
+        remote_src: true
+        creates: "{{ onionhop_install_dir }}/OnionHopV3.Cli"
+      when: onionhop_cli.enabled | bool
+
+    - name: Link OnionHop CLI into user PATH
+      ansible.builtin.file:
+        src: "{{ onionhop_install_dir }}/OnionHopV3.Cli"
+        dest: "{{ user_bin_dir }}/onionhop"
+        state: link
+        force: true
+      when: onionhop_cli.enabled | bool
+
+    - name: Ensure user bin directory exists
+      ansible.builtin.file:
+        path: "{{ ansible_facts['env']['HOME'] }}/.local/bin"
+        state: directory
+        mode: "0755"
+
+    - name: Link chezmoi-auto-sync into user PATH
+      ansible.builtin.file:
+        src: "{{ playbook_dir }}/../scripts/chezmoi-auto-sync"
+        dest: "{{ ansible_facts['env']['HOME'] }}/.local/bin/chezmoi-auto-sync"
+        state: link

@@ -1,0 +1,49 @@
+---
+pure_packages:
+  - ansible
+  - chezmoi
+  - curl
+  - git
+  - fish
+  - bat
+  - btop
+  - eza
+  - fastfetch
+  - fd-find
+  - less
+  - man-db
+  - neovim
+  - tar
+  - tree
+  - ugrep
+  - sddm
+  - google-noto-sans-fonts
+  - google-noto-emoji-fonts
+  - google-noto-color-emoji-fonts
+  - jetbrains-mono-fonts
+  - fontawesome4-fonts
+  - kde-connect
+  - keepassxc
+  - vlc
+  - libreoffice-calc
+  - libreoffice-writer
+  - libreoffice-impress
+  - libreoffice-emailmerge
+  - libreoffice-graphicfilter
+  - gcc
+  - gcc-c++
+  - golang
+  - make
+  - iwlwifi-mvm-firmware
+  - quickshell
+
+external_packages:
+  - ffmpeg
+  - hyprland
+  - hyprland-guiutils
+  - yazi
+  - kmod-v4l2loopback
+
+vendor_packages:
+  - brave-browser
+  - code

@@ -1,0 +1,113 @@
+---
+- name: install packages
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: true
+
+  vars_files:
+    - ../vars/packages.yml
+    - ../vars/repositories.yml
+    - ../vars/flatpak.yml
+
+  tasks:
+    - name: Verify Fedora
+      ansible.builtin.assert:
+        that:
+          - ansible_facts["distribution"] == "Fedora"
+        fail_msg: "This playbook is intended for Fedora."
+
+    - name: Install repository management prerequisites
+      ansible.builtin.dnf:
+        name:
+          - dnf-plugins-core
+          - flatpak
+        state: present
+
+    - name: Enable RPM Fusion repositories
+      ansible.builtin.dnf:
+        name:
+          - "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"
+          - "https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"
+        state: present
+      when: rpmfusion.enabled | bool
+
+    - name: Enable COPR repositories
+      community.general.copr:
+        name: "{{ item.name }}"
+        state: enabled
+      loop: "{{ copr_repositories }}"
+      register: copr_result
+      retries: 3
+      delay: 5
+      until: copr_result is succeeded
+
+    - name: Install Fedora packages
+      ansible.builtin.dnf:
+        name: "{{ pure_packages }}"
+        state: present
+
+    - name: Install external repository packages
+      ansible.builtin.dnf:
+        name: "{{ external_packages }}"
+        state: present
+
+    - name: Configure Flathub
+      community.general.flatpak_remote:
+        name: flathub
+        state: present
+        flatpakrepo_url: https://dl.flathub.org/repo/flathub.flatpakrepo
+        method: system
+
+    - name: Install Flatpak applications
+      community.general.flatpak:
+        name: "{{ item }}"
+        state: present
+        remote: flathub
+        method: system
+      loop: "{{ flatpak_applications }}"
+
+    - name: Configure Brave repository
+      ansible.builtin.yum_repository:
+        name: brave-browser
+        description: Brave Browser
+        baseurl: https://brave-browser-rpm-release.s3.brave.com/$basearch
+        enabled: true
+        gpgcheck: true
+        gpgkey: https://brave-browser-rpm-release.s3.brave.com/brave-core.asc
+        state: present
+      when: vendor_repositories.brave.enabled | bool
+
+    - name: Import Microsoft signing key
+      ansible.builtin.rpm_key:
+        key: "{{ vendor_repositories.vscode.gpg_key_url }}"
+        state: present
+      when: vendor_repositories.vscode.enabled | bool
+
+    - name: Configure VS Code repository
+      ansible.builtin.yum_repository:
+        name: code
+        description: Visual Studio Code
+        baseurl: "{{ vendor_repositories.vscode.repo_url }}"
+        enabled: true
+        gpgcheck: true
+        gpgkey: "{{ vendor_repositories.vscode.gpg_key_url }}"
+        state: present
+      when: vendor_repositories.vscode.enabled | bool
+
+    - name: Install vendor packages
+      ansible.builtin.dnf:
+        name: "{{ vendor_packages }}"
+        state: present
+
+    - name: Install Brave Browser
+      ansible.builtin.dnf:
+        name: brave-browser
+        state: present
+      when: vendor_repositories.brave.enabled | bool
+
+    - name: Install Visual Studio Code
+      ansible.builtin.dnf:
+        name: code
+        state: present
+      when: vendor_repositories.vscode.enabled | bool
