@@ -1,0 +1,4 @@
+obs_recording_path: "{{ ansible_facts['user_dir'] }}/Videos"
+
+nerd_font_version: "v3.5.1"
+nerd_font_name: "JetBrainsMono"

@@ -68,7 +68,8 @@ git -C "$REPO_DIR" rev-parse --is-inside-work-tree \
 for file in \
   requirements.yml \
   playbooks/default-install.yml \
-  playbooks/manual-install.yml; do
+  playbooks/manual-install.yml \
+  playbooks/tweaks.yml; do
   [[ -f "$REPO_DIR/$file" ]] ||
     die "Required file not found: $REPO_DIR/$file"
 done
@@ -88,6 +89,11 @@ ansible-playbook \
 log "Installing user-level tools..."
 ansible-playbook \
   "$REPO_DIR/playbooks/manual-install.yml"
+
+# Apply small system and user configuration tweaks.
+log "Applying system tweaks..."
+ansible-playbook \
+  "$REPO_DIR/playbooks/tweaks.yml"
 
 # Initialize or validate chezmoi source.
 CHEZMOI_SOURCE="$(chezmoi source-path)"

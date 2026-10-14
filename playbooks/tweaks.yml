@@ -1,0 +1,76 @@
+---
+- name: Apply small system configurations
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: true
+
+  vars:
+    obs_recording_path: "{{ ansible_facts['user_dir'] }}/Videos"
+    obs_config_path: "{{ ansible_facts['user_dir'] }}/.config/obs-studio/basic/profiles/Untitled/basic.ini"
+
+    nerd_font_version: "v3.4.0"
+    nerd_font_name: "JetBrainsMono"
+    fonts_dir: "{{ ansible_facts['user_dir'] }}/.local/share/fonts"
+    nerd_font_dir: "{{ fonts_dir }}/{{ nerd_font_name }}-{{ nerd_font_version }}"
+    nerd_font_archive: "{{ ansible_facts['user_dir'] }}/{{ nerd_font_name }}-{{ nerd_font_version }}.tar.xz"
+    nerd_font_url: "https://github.com/ryanoasis/nerd-fonts/releases/download/{{ nerd_font_version }}/{{ nerd_font_name }}.tar.xz"
+
+  tasks:
+    - name: Check OBS profile configuration
+      ansible.builtin.stat:
+        path: "{{ obs_config_path }}"
+      register: obs_config
+
+    - name: Configure OBS recording directory
+      community.general.ini_file:
+        path: "{{ obs_config_path }}"
+        section: SimpleOutput
+        option: FilePath
+        value: "{{ obs_recording_path }}"
+      when: obs_config.stat.exists
+
+    - name: Create fonts directory
+      ansible.builtin.file:
+        path: "{{ nerd_font_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Check whether JetBrainsMono Nerd Font is installed
+      ansible.builtin.find:
+        paths: "{{ nerd_font_dir }}"
+        patterns:
+          - "*.ttf"
+        file_type: file
+      register: nerd_font_files
+
+    - name: Download JetBrainsMono Nerd Font archive
+      ansible.builtin.get_url:
+        url: "{{ nerd_font_url }}"
+        dest: "{{ nerd_font_archive }}"
+        mode: "0644"
+      when: nerd_font_files.matched == 0
+
+    - name: Extract JetBrainsMono Nerd Font
+      ansible.builtin.unarchive:
+        src: "{{ nerd_font_archive }}"
+        dest: "{{ nerd_font_dir }}"
+        remote_src: true
+      when: nerd_font_files.matched == 0
+
+    - name: Refresh font cache
+      ansible.builtin.command:
+        argv:
+          - fc-cache
+          - -f
+          - "{{ nerd_font_dir }}"
+      changed_when: true
+      when: nerd_font_files.matched == 0
+
+    - name: Remove downloaded Nerd Font archive
+      ansible.builtin.file:
+        path: "{{ nerd_font_archive }}"
+        state: absent
+      when:
+        - nerd_font_files.matched == 0
+        - not ansible_check_mode

@@ -37,13 +37,15 @@ pure_packages:
   - iwlwifi-mvm-firmware
   - quickshell
   - nautilus
+  - google-noto-sans-cjk-fonts
+  - vazirmatn-vf-fonts
 
 external_packages:
   - ffmpeg
   - hyprland
   - hyprland-guiutils
   - yazi
-  - kmod-v4l2loopback
+  - obs-studio
 
 vendor_packages:
   - brave-browser
