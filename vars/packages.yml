@@ -36,6 +36,7 @@ pure_packages:
   - make
   - iwlwifi-mvm-firmware
   - quickshell
+  - nautilus
 
 external_packages:
   - ffmpeg
