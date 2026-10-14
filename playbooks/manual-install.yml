@@ -148,15 +148,3 @@
         state: link
         force: true
       when: onionhop_cli.enabled | bool
-
-    - name: Ensure user bin directory exists
-      ansible.builtin.file:
-        path: "{{ ansible_facts['env']['HOME'] }}/.local/bin"
-        state: directory
-        mode: "0755"
-
-    - name: Link chezmoi-auto-sync into user PATH
-      ansible.builtin.file:
-        src: "{{ playbook_dir }}/../scripts/chezmoi-auto-sync"
-        dest: "{{ ansible_facts['env']['HOME'] }}/.local/bin/chezmoi-auto-sync"
-        state: link
