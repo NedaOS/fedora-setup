@@ -75,18 +75,18 @@ done
 
 # Install required Ansible collections.
 log "Installing Ansible collections..."
-ansible-galaxy collection install 
+ansible-galaxy collection install \
   -r "$REPO_DIR/requirements.yml"
 
 # Install system packages and configure repositories.
 log "Installing system packages and configuring repositories..."
-ansible-playbook 
-  "$REPO_DIR/playbooks/default-install.yml" 
+ansible-playbook \
+  "$REPO_DIR/playbooks/default-install.yml" \
   --ask-become-pass
 
 # Install user-level tools.
 log "Installing user-level tools..."
-ansible-playbook 
+ansible-playbook \
   "$REPO_DIR/playbooks/manual-install.yml"
 
 # Initialize or validate chezmoi source.
@@ -98,13 +98,13 @@ if [[ -d "$CHEZMOI_SOURCE/.git" ]]; then
   )" || die "Cannot determine chezmoi source remote."
 
   case "$CHEZMOI_REMOTE" in
-    git@github.com:NedaOS/live-dotfiles.git|
-    https://github.com/NedaOS/live-dotfiles.git|\
+  git@github.com:NedaOS/live-dotfiles.git | \
+    https://github.com/NedaOS/live-dotfiles.git | \
     https://github.com/NedaOS/live-dotfiles)
-      ;;
-    *)
-      die "Unexpected chezmoi source remote: $CHEZMOI_REMOTE"
-      ;;
+    ;;
+  *)
+    die "Unexpected chezmoi source remote: $CHEZMOI_REMOTE"
+    ;;
   esac
 
   log "Applying existing chezmoi configuration..."
