@@ -65,9 +65,9 @@ git -C "$REPO_DIR" rev-parse --is-inside-work-tree \
   >/dev/null 2>&1 ||
   die "Invalid Git repository: $REPO_DIR"
 
-for file in 
-  requirements.yml 
-  playbooks/default-install.yml 
+for file in \
+  requirements.yml \
+  playbooks/default-install.yml \
   playbooks/manual-install.yml; do
   [[ -f "$REPO_DIR/$file" ]] ||
     die "Required file not found: $REPO_DIR/$file"
