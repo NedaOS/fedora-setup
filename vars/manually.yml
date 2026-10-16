@@ -5,6 +5,7 @@ cliamp:
 onionhop_cli:
   enabled: true
   version: "3.8.6"
+  sha256: "1c8e354d6e294f0924185ec764113c874a48c4675e3e15b6cf1ef56b643eddac"
 
 fnm:
   enabled: true

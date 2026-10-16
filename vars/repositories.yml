@@ -1,7 +1,11 @@
 ---
+supported_fedora_releases:
+  - "44"
+
 copr_repositories:
   - name: lionheartp/Hyprland
   - name: lihaohong/yazi
+  - name: mkocustos/grub-btrfs
 
 rpmfusion:
   enabled: true
@@ -9,9 +13,16 @@ rpmfusion:
 vendor_repositories:
   brave:
     enabled: true
-    repo_url: https://brave-browser-rpm-release.s3.brave.com/brave-browser.repo
+    repo_id: brave-browser
+    description: Brave Browser
+    baseurl: https://brave-browser-rpm-release.s3.brave.com/$basearch
+    gpg_key_url: https://brave-browser-rpm-release.s3.brave.com/brave-core.asc
+    package: brave-browser
 
   vscode:
     enabled: true
-    repo_url: https://packages.microsoft.com/yumrepos/vscode
+    repo_id: code
+    description: Visual Studio Code
+    baseurl: https://packages.microsoft.com/yumrepos/vscode
     gpg_key_url: https://packages.microsoft.com/keys/microsoft.asc
+    package: code

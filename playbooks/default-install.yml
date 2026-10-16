@@ -1,5 +1,5 @@
 ---
-- name: install packages
+- name: Install packages and configure repositories
   hosts: localhost
   connection: local
   become: true
@@ -10,104 +10,176 @@
     - ../vars/repositories.yml
     - ../vars/flatpak.yml
 
+  vars:
+    enabled_vendor_repositories: >-
+      {{ vendor_repositories | dict2items | selectattr('value.enabled') | list }}
+
   tasks:
-    - name: Verify Fedora
+    - name: Verify Fedora release
       ansible.builtin.assert:
         that:
           - ansible_facts["distribution"] == "Fedora"
-        fail_msg: "This playbook is intended for Fedora."
+          - ansible_facts["distribution_major_version"] in supported_fedora_releases
+        fail_msg: >-
+          Supported: Fedora {{ supported_fedora_releases | join(", ") }}.
+          Detected: {{ ansible_facts["distribution"] }} {{ ansible_facts["distribution_major_version"] }}.
 
-    - name: Install repository management prerequisites
-      ansible.builtin.dnf:
-        name:
-          - dnf-plugins-core
-          - flatpak
-        state: present
+    - name: Repository management prerequisites
+      block:
+        - name: Install repository management prerequisites
+          ansible.builtin.dnf:
+            name:
+              - dnf-plugins-core
+              - flatpak
+            state: present
+      rescue:
+        - name: Record failed step (repository prerequisites)
+          ansible.builtin.set_fact:
+            failed_steps: >-
+              {{ failed_steps | default([]) +
+              ['repository prerequisites: ' ~ (ansible_failed_result.msg | default('unknown error') | string | truncate(160))] }}
 
-    - name: Enable RPM Fusion repositories
-      ansible.builtin.dnf:
-        name:
-          - "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"
-          - "https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"
-        state: present
+    - name: RPM Fusion repositories
       when: rpmfusion.enabled | bool
+      block:
+        - name: Enable RPM Fusion repositories
+          ansible.builtin.dnf:
+            name:
+              - "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"
+              - "https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"
+            state: present
+      rescue:
+        - name: Record failed step (RPM Fusion repositories)
+          ansible.builtin.set_fact:
+            failed_steps: >-
+              {{ failed_steps | default([]) +
+              ['RPM Fusion repositories: ' ~ (ansible_failed_result.msg | default('unknown error') | string | truncate(160))] }}
 
-    - name: Enable COPR repositories
-      community.general.copr:
-        name: "{{ item.name }}"
-        state: enabled
-      loop: "{{ copr_repositories }}"
-      register: copr_result
-      retries: 3
-      delay: 5
-      until: copr_result is succeeded
+    - name: COPR repositories
+      block:
+        - name: Enable COPR repositories
+          community.general.copr:
+            name: "{{ item.name }}"
+            state: enabled
+          loop: "{{ copr_repositories }}"
+          register: copr_result
+          retries: 3
+          delay: 5
+          until: copr_result is succeeded
+      rescue:
+        - name: Record failed step (COPR repositories)
+          ansible.builtin.set_fact:
+            failed_steps: >-
+              {{ failed_steps | default([]) +
+              ['COPR repositories: ' ~ (ansible_failed_result.msg | default('unknown error') | string | truncate(160))] }}
 
-    - name: Install Fedora packages
-      ansible.builtin.dnf:
-        name: "{{ pure_packages }}"
-        state: present
+    - name: Vendor repositories
+      block:
+        - name: Import vendor signing keys
+          ansible.builtin.rpm_key:
+            key: "{{ item.value.gpg_key_url }}"
+            state: present
+          loop: "{{ enabled_vendor_repositories }}"
+          loop_control:
+            label: "{{ item.key }}"
 
-    - name: Install external repository packages
-      ansible.builtin.dnf:
-        name: "{{ external_packages }}"
-        state: present
+        - name: Configure vendor repositories
+          ansible.builtin.yum_repository:
+            name: "{{ item.value.repo_id }}"
+            description: "{{ item.value.description }}"
+            baseurl: "{{ item.value.baseurl }}"
+            enabled: true
+            gpgcheck: true
+            gpgkey: "{{ item.value.gpg_key_url }}"
+            state: present
+          loop: "{{ enabled_vendor_repositories }}"
+          loop_control:
+            label: "{{ item.key }}"
+      rescue:
+        - name: Record failed step (vendor repositories)
+          ansible.builtin.set_fact:
+            failed_steps: >-
+              {{ failed_steps | default([]) +
+              ['vendor repositories: ' ~ (ansible_failed_result.msg | default('unknown error') | string | truncate(160))] }}
 
-    - name: Configure Flathub
-      community.general.flatpak_remote:
-        name: flathub
-        state: present
-        flatpakrepo_url: https://dl.flathub.org/repo/flathub.flatpakrepo
-        method: system
+    - name: Fedora packages
+      block:
+        - name: Install Fedora packages
+          ansible.builtin.dnf:
+            name: "{{ pure_packages }}"
+            state: present
+      rescue:
+        - name: Record failed step (Fedora packages)
+          ansible.builtin.set_fact:
+            failed_steps: >-
+              {{ failed_steps | default([]) +
+              ['Fedora packages: ' ~ (ansible_failed_result.msg | default('unknown error') | string | truncate(160))] }}
 
-    - name: Install Flatpak applications
-      community.general.flatpak:
-        name: "{{ item }}"
-        state: present
-        remote: flathub
-        method: system
-      loop: "{{ flatpak_applications }}"
+    - name: COPR packages
+      block:
+        - name: Install COPR packages
+          ansible.builtin.dnf:
+            name: "{{ copr_packages }}"
+            state: present
+      rescue:
+        - name: Record failed step (COPR packages)
+          ansible.builtin.set_fact:
+            failed_steps: >-
+              {{ failed_steps | default([]) +
+              ['COPR packages: ' ~ (ansible_failed_result.msg | default('unknown error') | string | truncate(160))] }}
 
-    - name: Configure Brave repository
-      ansible.builtin.yum_repository:
-        name: brave-browser
-        description: Brave Browser
-        baseurl: https://brave-browser-rpm-release.s3.brave.com/$basearch
-        enabled: true
-        gpgcheck: true
-        gpgkey: https://brave-browser-rpm-release.s3.brave.com/brave-core.asc
-        state: present
-      when: vendor_repositories.brave.enabled | bool
+    - name: RPM Fusion packages
+      when: rpmfusion.enabled | bool
+      block:
+        - name: Install RPM Fusion packages
+          ansible.builtin.dnf:
+            name: "{{ rpmfusion_packages }}"
+            state: present
+      rescue:
+        - name: Record failed step (RPM Fusion packages)
+          ansible.builtin.set_fact:
+            failed_steps: >-
+              {{ failed_steps | default([]) +
+              ['RPM Fusion packages: ' ~ (ansible_failed_result.msg | default('unknown error') | string | truncate(160))] }}
 
-    - name: Import Microsoft signing key
-      ansible.builtin.rpm_key:
-        key: "{{ vendor_repositories.vscode.gpg_key_url }}"
-        state: present
-      when: vendor_repositories.vscode.enabled | bool
+    - name: Vendor packages
+      when: enabled_vendor_repositories | length > 0
+      block:
+        - name: Install vendor packages
+          ansible.builtin.dnf:
+            name: "{{ enabled_vendor_repositories | map(attribute='value.package') | list }}"
+            state: present
+      rescue:
+        - name: Record failed step (vendor packages)
+          ansible.builtin.set_fact:
+            failed_steps: >-
+              {{ failed_steps | default([]) +
+              ['vendor packages: ' ~ (ansible_failed_result.msg | default('unknown error') | string | truncate(160))] }}
 
-    - name: Configure VS Code repository
-      ansible.builtin.yum_repository:
-        name: code
-        description: Visual Studio Code
-        baseurl: "{{ vendor_repositories.vscode.repo_url }}"
-        enabled: true
-        gpgcheck: true
-        gpgkey: "{{ vendor_repositories.vscode.gpg_key_url }}"
-        state: present
-      when: vendor_repositories.vscode.enabled | bool
+    - name: Flatpak
+      block:
+        - name: Configure Flathub
+          community.general.flatpak_remote:
+            name: flathub
+            state: present
+            flatpakrepo_url: https://dl.flathub.org/repo/flathub.flatpakrepo
+            method: system
 
-    - name: Install vendor packages
-      ansible.builtin.dnf:
-        name: "{{ vendor_packages }}"
-        state: present
+        - name: Install Flatpak applications
+          community.general.flatpak:
+            name: "{{ item }}"
+            state: present
+            remote: flathub
+            method: system
+          loop: "{{ flatpak_applications }}"
+      rescue:
+        - name: Record failed step (Flatpak)
+          ansible.builtin.set_fact:
+            failed_steps: >-
+              {{ failed_steps | default([]) +
+              ['Flatpak: ' ~ (ansible_failed_result.msg | default('unknown error') | string | truncate(160))] }}
 
-    - name: Install Brave Browser
-      ansible.builtin.dnf:
-        name: brave-browser
-        state: present
-      when: vendor_repositories.brave.enabled | bool
-
-    - name: Install Visual Studio Code
-      ansible.builtin.dnf:
-        name: code
-        state: present
-      when: vendor_repositories.vscode.enabled | bool
+    - name: Report steps that did not complete
+      ansible.builtin.fail:
+        msg: "{{ ['These steps did not complete (re-run this playbook to retry them):'] + failed_steps }}"
+      when: failed_steps | default([]) | length > 0

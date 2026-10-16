@@ -1,6 +1,5 @@
 ---
 pure_packages:
-  - ansible
   - chezmoi
   - curl
   - git
@@ -24,7 +23,7 @@ pure_packages:
   - fontawesome4-fonts
   - kde-connect
   - keepassxc
-  - vlc
+  - mpv
   - libreoffice-calc
   - libreoffice-writer
   - libreoffice-impress
@@ -34,19 +33,18 @@ pure_packages:
   - gcc-c++
   - golang
   - make
-  - iwlwifi-mvm-firmware
   - quickshell
   - nautilus
-  - google-noto-sans-cjk-fonts
-  - vazirmatn-vf-fonts
+  - iwlwifi-mvm-firmware
+  - snapper
+  - btrfs-assistant
+  - libdnf5-plugin-actions
 
-external_packages:
-  - ffmpeg
+copr_packages:
   - hyprland
   - hyprland-guiutils
   - yazi
-  - obs-studio
+  - grub-btrfs
 
-vendor_packages:
-  - brave-browser
-  - code
+rpmfusion_packages:
+  - ffmpeg

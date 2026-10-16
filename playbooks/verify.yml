@@ -1,0 +1,61 @@
+---
+- name: Verify the installed system matches the repository
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: true
+
+  vars_files:
+    - ../vars/packages.yml
+    - ../vars/repositories.yml
+    - ../vars/manually.yml
+
+  vars:
+    user_home: "{{ ansible_facts['env']['HOME'] }}"
+    enabled_vendor_repositories: >-
+      {{ vendor_repositories | dict2items | selectattr('value.enabled') | list }}
+    expected_packages: >-
+      {{ pure_packages + copr_packages + rpmfusion_packages + (enabled_vendor_repositories | map(attribute='value.package') | list) }}
+    manual_tools:
+      - { name: cliamp, enabled: "{{ cliamp.enabled }}", path: "{{ user_home }}/.local/bin/cliamp" }
+      - { name: fnm, enabled: "{{ fnm.enabled }}", path: "{{ user_home }}/.local/share/fnm/fnm" }
+      - { name: onionhop, enabled: "{{ onionhop_cli.enabled }}", path: "{{ user_home }}/.local/bin/onionhop" }
+
+  tasks:
+    - name: Gather package facts
+      ansible.builtin.package_facts:
+        manager: auto
+
+    - name: Gather service facts
+      ansible.builtin.service_facts:
+
+    - name: Check manually installed tools
+      ansible.builtin.stat:
+        path: "{{ item.path }}"
+      loop: "{{ manual_tools }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: manual_tool_stats
+
+    - name: Collect problems
+      ansible.builtin.set_fact:
+        problems: >-
+          {{
+            (['Unsupported Fedora release: ' ~ ansible_facts['distribution_major_version']]
+              if ansible_facts['distribution_major_version'] not in supported_fedora_releases else [])
+            + (['Missing packages: ' ~ (expected_packages | difference(ansible_facts.packages.keys() | list) | join(', '))]
+              if (expected_packages | difference(ansible_facts.packages.keys() | list)) | length > 0 else [])
+            + (['sddm.service is not enabled']
+              if ansible_facts.services['sddm.service'].status | default('absent') != 'enabled' else [])
+            + (manual_tool_stats.results
+              | selectattr('item.enabled')
+              | rejectattr('stat.exists')
+              | map(attribute='item.name')
+              | map('regex_replace', '^(.*)$', 'Tool not installed: \1')
+              | list)
+          }}
+
+    - name: Report result
+      ansible.builtin.fail:
+        msg: "{{ ['Verification found problems:'] + problems }}"
+      when: problems | length > 0

@@ -1,4 +1,8 @@
 ---
+# Each tool is installed in its own block. A failure (for example no network) is recorded
+# and the remaining tools still run. The play fails only at the very end, after everything
+# else has been attempted, so the exit status still tells you something was incomplete.
+# Re-running the playbook retries only what is missing.
 - name: Manage manually installed tools
   hosts: localhost
   connection: local
@@ -13,6 +17,8 @@
     user_bin_dir: "{{ user_home }}/.local/bin"
     user_opt_dir: "{{ user_home }}/.local/opt"
     user_cache_dir: "{{ user_home }}/.cache"
+    download_retries: 3
+    download_delay: 5
 
   tasks:
     - name: Ensure user directories exist
@@ -26,125 +32,159 @@
         - "{{ user_cache_dir }}"
 
     # cliamp
-    - name: Check whether cliamp is installed
-      ansible.builtin.stat:
-        path: "{{ user_bin_dir }}/cliamp"
-      register: cliamp_binary
-      when: cliamp.enabled | bool
-
-    - name: Download cliamp installer
-      ansible.builtin.get_url:
-        url: https://cliamp.stream/install.sh
-        dest: "{{ user_cache_dir }}/cliamp-install.sh"
-        mode: "0644"
-      when:
-        - cliamp.enabled | bool
-        - not cliamp_binary.stat.exists
-
     - name: Install cliamp
-      ansible.builtin.command:
-        argv:
-          - sh
-          - "{{ user_cache_dir }}/cliamp-install.sh"
-      args:
-        creates: "{{ user_bin_dir }}/cliamp"
-      when:
-        - cliamp.enabled | bool
-        - not cliamp_binary.stat.exists
+      when: cliamp.enabled | bool
+      block:
+        - name: Check whether cliamp is installed
+          ansible.builtin.stat:
+            path: "{{ user_bin_dir }}/cliamp"
+          register: cliamp_binary
 
-    # fnm
-    - name: Check whether fnm is installed
-      ansible.builtin.stat:
-        path: "{{ user_home }}/.local/share/fnm/fnm"
-      register: fnm_binary
+        - name: Download cliamp installer
+          ansible.builtin.get_url:
+            url: https://cliamp.stream/install.sh
+            dest: "{{ user_cache_dir }}/cliamp-install.sh"
+            mode: "0644"
+          register: cliamp_download
+          retries: "{{ download_retries }}"
+          delay: "{{ download_delay }}"
+          until: cliamp_download is succeeded
+          when: not cliamp_binary.stat.exists
+
+        - name: Run cliamp installer
+          ansible.builtin.command:
+            argv:
+              - sh
+              - "{{ user_cache_dir }}/cliamp-install.sh"
+          args:
+            creates: "{{ user_bin_dir }}/cliamp"
+          when: not cliamp_binary.stat.exists
+      rescue:
+        - name: Record failed step (cliamp)
+          ansible.builtin.set_fact:
+            failed_steps: >-
+              {{ failed_steps | default([]) +
+              ['cliamp: ' ~ (ansible_failed_result.msg | default('unknown error') | string | truncate(160))] }}
+
+    # fnm and Node.js
+    - name: Install fnm and Node.js
       when: fnm.enabled | bool
+      block:
+        - name: Check whether fnm is installed
+          ansible.builtin.stat:
+            path: "{{ user_home }}/.local/share/fnm/fnm"
+          register: fnm_binary
 
-    - name: Download fnm installer
-      ansible.builtin.get_url:
-        url: https://fnm.vercel.app/install
-        dest: "{{ user_cache_dir }}/fnm-install.sh"
-        mode: "0644"
-      when:
-        - fnm.enabled | bool
-        - not fnm_binary.stat.exists
+        - name: Download fnm installer
+          ansible.builtin.get_url:
+            url: https://fnm.vercel.app/install
+            dest: "{{ user_cache_dir }}/fnm-install.sh"
+            mode: "0644"
+          register: fnm_download
+          retries: "{{ download_retries }}"
+          delay: "{{ download_delay }}"
+          until: fnm_download is succeeded
+          when: not fnm_binary.stat.exists
 
-    - name: Install fnm
-      ansible.builtin.command:
-        argv:
-          - bash
-          - "{{ user_cache_dir }}/fnm-install.sh"
-      args:
-        creates: "{{ user_home }}/.local/share/fnm/fnm"
-      when:
-        - fnm.enabled | bool
-        - not fnm_binary.stat.exists
+        - name: Run fnm installer
+          ansible.builtin.command:
+            argv:
+              - bash
+              - "{{ user_cache_dir }}/fnm-install.sh"
+              - --skip-shell
+              - --install-dir
+              - "{{ user_home }}/.local/share/fnm"
+          args:
+            creates: "{{ user_home }}/.local/share/fnm/fnm"
+          when: not fnm_binary.stat.exists
 
-    - name: Check installed Node.js versions
-      ansible.builtin.command:
-        argv:
-          - "{{ user_home }}/.local/share/fnm/fnm"
-          - list
-      register: fnm_versions
-      changed_when: false
-      when:
-        - fnm.enabled | bool
-        - fnm_binary.stat.exists or
-          (fnm_install_result is defined and fnm_install_result is succeeded)
+        - name: Re-check whether fnm is installed
+          ansible.builtin.stat:
+            path: "{{ user_home }}/.local/share/fnm/fnm"
+          register: fnm_binary_final
 
-    - name: Install requested Node.js version
-      ansible.builtin.command:
-        argv:
-          - "{{ user_home }}/.local/share/fnm/fnm"
-          - install
-          - "{{ fnm.node_version }}"
-      register: fnm_node_install
-      changed_when: true
-      when:
-        - fnm.enabled | bool
-        - "'v' ~ fnm.node_version not in fnm_versions.stdout"
+        - name: Check installed Node.js versions
+          ansible.builtin.command:
+            argv:
+              - "{{ user_home }}/.local/share/fnm/fnm"
+              - list
+          register: fnm_versions
+          changed_when: false
+          when: fnm_binary_final.stat.exists
+
+        - name: Install requested Node.js version
+          ansible.builtin.command:
+            argv:
+              - "{{ user_home }}/.local/share/fnm/fnm"
+              - install
+              - "{{ fnm.node_version }}"
+          changed_when: true
+          when:
+            - fnm_binary_final.stat.exists
+            - fnm_versions.stdout is not search('(^|\\s)v' ~ (fnm.node_version | regex_escape) ~ '(\\s|$)', multiline=True)
+      rescue:
+        - name: Record failed step (fnm / Node.js)
+          ansible.builtin.set_fact:
+            failed_steps: >-
+              {{ failed_steps | default([]) +
+              ['fnm / Node.js: ' ~ (ansible_failed_result.msg | default('unknown error') | string | truncate(160))] }}
 
     # OnionHop CLI
-    - name: Define OnionHop paths
-      ansible.builtin.set_fact:
+    - name: Install OnionHop CLI
+      when: onionhop_cli.enabled | bool
+      vars:
         onionhop_archive_name: "OnionHopCLI-{{ onionhop_cli.version }}-linux-x64.tar.gz"
         onionhop_install_dir: "{{ user_opt_dir }}/onionhop/{{ onionhop_cli.version }}"
         onionhop_archive_path: "{{ user_cache_dir }}/OnionHopCLI-{{ onionhop_cli.version }}-linux-x64.tar.gz"
-      when: onionhop_cli.enabled | bool
+      block:
+        - name: Verify OnionHop checksum is pinned
+          ansible.builtin.assert:
+            that:
+              - onionhop_cli.sha256 is match('^[0-9a-f]{64}$')
+            fail_msg: "Set onionhop_cli.sha256 in vars/manually.yml to a verified SHA-256."
+            quiet: true
 
-    - name: Ensure OnionHop installation directory exists
-      ansible.builtin.file:
-        path: "{{ onionhop_install_dir }}"
-        state: directory
-        mode: "0755"
-      when: onionhop_cli.enabled | bool
+        - name: Ensure OnionHop installation directory exists
+          ansible.builtin.file:
+            path: "{{ onionhop_install_dir }}"
+            state: directory
+            mode: "0755"
 
-    - name: Check whether OnionHop archive is cached
-      ansible.builtin.stat:
-        path: "{{ onionhop_archive_path }}"
-      register: onionhop_archive
-      when: onionhop_cli.enabled | bool
+        - name: Download OnionHop CLI archive
+          ansible.builtin.get_url:
+            url: "https://github.com/center2055/OnionHop/releases/download/v{{ onionhop_cli.version }}/{{ onionhop_archive_name }}"
+            dest: "{{ onionhop_archive_path }}"
+            checksum: "sha256:{{ onionhop_cli.sha256 }}"
+            mode: "0644"
+            timeout: 60
+          register: onionhop_download
+          retries: "{{ download_retries }}"
+          delay: "{{ download_delay }}"
+          until: onionhop_download is succeeded
 
-    - name: Download OnionHop CLI archive
-      ansible.builtin.get_url:
-        url: "https://github.com/center2055/OnionHop/releases/download/v{{ onionhop_cli.version }}/{{ onionhop_archive_name }}"
-        dest: "{{ onionhop_archive_path }}"
-        mode: "0644"
-      when:
-        - onionhop_cli.enabled | bool
-        - not onionhop_archive.stat.exists
+        - name: Extract OnionHop CLI
+          ansible.builtin.unarchive:
+            src: "{{ onionhop_archive_path }}"
+            dest: "{{ onionhop_install_dir }}"
+            remote_src: true
+            creates: "{{ onionhop_install_dir }}/OnionHopV3.Cli"
 
-    - name: Extract OnionHop CLI
-      ansible.builtin.unarchive:
-        src: "{{ onionhop_archive_path }}"
-        dest: "{{ onionhop_install_dir }}"
-        remote_src: true
-        creates: "{{ onionhop_install_dir }}/OnionHopV3.Cli"
-      when: onionhop_cli.enabled | bool
+        - name: Link OnionHop CLI into user PATH
+          ansible.builtin.file:
+            src: "{{ onionhop_install_dir }}/OnionHopV3.Cli"
+            dest: "{{ user_bin_dir }}/onionhop"
+            state: link
+            force: true
+      rescue:
+        - name: Record failed step (OnionHop CLI)
+          ansible.builtin.set_fact:
+            failed_steps: >-
+              {{ failed_steps | default([]) +
+              [('SECURITY - checksum mismatch, archive NOT installed: '
+                if 'checksum' in (ansible_failed_result.msg | default('') | string | lower) else 'OnionHop CLI: ')
+               ~ (ansible_failed_result.msg | default('unknown error') | string | truncate(160))] }}
 
-    - name: Link OnionHop CLI into user PATH
-      ansible.builtin.file:
-        src: "{{ onionhop_install_dir }}/OnionHopV3.Cli"
-        dest: "{{ user_bin_dir }}/onionhop"
-        state: link
-        force: true
-      when: onionhop_cli.enabled | bool
+    - name: Report steps that did not complete
+      ansible.builtin.fail:
+        msg: "{{ ['These steps did not complete (re-run this playbook to retry them):'] + failed_steps }}"
+      when: failed_steps | default([]) | length > 0

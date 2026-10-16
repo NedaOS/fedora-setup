@@ -5,6 +5,9 @@ REPO_URL="https://github.com/NedaOS/fedora-setup.git"
 CHEZMOI_REPO_URL="https://github.com/NedaOS/live-dotfiles.git"
 REPO_DIR="${FEDORA_SETUP_DIR:-${HOME}/Ansible}"
 
+# The only supported platform: Fedora 44. Anything else is rejected before any change is made.
+SUPPORTED_FEDORA_VERSION="44"
+
 log() {
   printf '\n[bootstrap] %s\n' "$*"
 }
@@ -12,6 +15,17 @@ log() {
 die() {
   printf '\n[bootstrap] ERROR: %s\n' "$*" >&2
   exit 1
+}
+
+# Run a stage; if it fails (for example no network), record it and keep going.
+FAILED_STAGES=()
+run_stage() {
+  local name="$1"
+  shift
+  if ! "$@"; then
+    FAILED_STAGES+=("$name")
+    printf '\n[bootstrap] WARNING: stage failed, continuing: %s\n' "$name" >&2
+  fi
 }
 
 # Verify the operating system.
@@ -22,7 +36,10 @@ die() {
 source /etc/os-release
 
 [[ "${ID:-}" == "fedora" ]] ||
-  die "This bootstrap script is intended for Fedora."
+  die "Unsupported operating system: ${PRETTY_NAME:-${ID:-unknown}}. This bootstrap script supports Fedora ${SUPPORTED_FEDORA_VERSION} only."
+
+[[ "${VERSION_ID:-}" == "$SUPPORTED_FEDORA_VERSION" ]] ||
+  die "Unsupported Fedora release: ${VERSION_ID:-unknown}. This bootstrap script supports Fedora ${SUPPORTED_FEDORA_VERSION} only."
 
 # This script must run as a regular user.
 [[ "${EUID}" -ne 0 ]] ||
@@ -68,32 +85,31 @@ git -C "$REPO_DIR" rev-parse --is-inside-work-tree \
 for file in \
   requirements.yml \
   playbooks/default-install.yml \
-  playbooks/manual-install.yml \
-  playbooks/tweaks.yml; do
+  playbooks/manual-install.yml; do
   [[ -f "$REPO_DIR/$file" ]] ||
     die "Required file not found: $REPO_DIR/$file"
 done
 
 # Install required Ansible collections.
 log "Installing Ansible collections..."
-ansible-galaxy collection install \
+run_stage "Ansible collections" \
+  ansible-galaxy collection install \
   -r "$REPO_DIR/requirements.yml"
 
 # Install system packages and configure repositories.
 log "Installing system packages and configuring repositories..."
-ansible-playbook \
+run_stage "System packages (default-install.yml)" \
+  ansible-playbook \
+  -i localhost, \
   "$REPO_DIR/playbooks/default-install.yml" \
   --ask-become-pass
 
 # Install user-level tools.
 log "Installing user-level tools..."
-ansible-playbook \
+run_stage "User-level tools (manual-install.yml)" \
+  ansible-playbook \
+  -i localhost, \
   "$REPO_DIR/playbooks/manual-install.yml"
-
-# Apply small system and user configuration tweaks.
-log "Applying system tweaks..."
-ansible-playbook \
-  "$REPO_DIR/playbooks/tweaks.yml"
 
 # Initialize or validate chezmoi source.
 CHEZMOI_SOURCE="$(chezmoi source-path)"
@@ -121,6 +137,12 @@ else
 
   log "Initializing chezmoi from NedaOS/live-dotfiles..."
   chezmoi init --apply "$CHEZMOI_REPO_URL"
+fi
+
+if ((${#FAILED_STAGES[@]} > 0)); then
+  printf '\n[bootstrap] Finished with failed stages (re-run this script to retry; steps are idempotent):\n' >&2
+  printf '  - %s\n' "${FAILED_STAGES[@]}" >&2
+  exit 1
 fi
 
 log "Bootstrap completed successfully."
