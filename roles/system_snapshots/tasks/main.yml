@@ -55,6 +55,110 @@
     path: "{{ system_snapshots_expected.dracut_config }}"
   register: system_snapshots_dracut_config
 
+- name: Checksum installed custom Dracut module files
+  ansible.builtin.stat:
+    path: "{{ system_snapshots_expected.dracut_module_dir }}/{{ item }}"
+    checksum_algorithm: sha256
+  loop: "{{ system_snapshots_dracut_files }}"
+  register: system_snapshots_dracut_installed
+
+- name: Checksum repository copies of the Dracut module files
+  ansible.builtin.stat:
+    path: "{{ role_path }}/files/dracut/69overlayfs/{{ item }}"
+    checksum_algorithm: sha256
+  loop: "{{ system_snapshots_dracut_files }}"
+  register: system_snapshots_dracut_repo
+
+- name: Check grub-btrfs configuration file
+  ansible.builtin.stat:
+    path: "{{ system_snapshots_expected.grub_btrfs_config }}"
+  register: system_snapshots_grub_btrfs_config
+
+- name: Read Dracut configuration
+  ansible.builtin.slurp:
+    src: "{{ system_snapshots_expected.dracut_config }}"
+  register: system_snapshots_dracut_config_content
+  when: system_snapshots_dracut_config.stat.exists
+
+- name: Read grub-btrfs configuration
+  ansible.builtin.slurp:
+    src: "{{ system_snapshots_expected.grub_btrfs_config }}"
+  register: system_snapshots_grub_btrfs_config_content
+  when: system_snapshots_grub_btrfs_config.stat.exists
+
+- name: Check initramfs of the running kernel
+  ansible.builtin.stat:
+    path: "/boot/initramfs-{{ ansible_facts['kernel'] }}.img"
+  register: system_snapshots_initramfs
+
+- name: List Dracut modules inside the running kernel initramfs
+  ansible.builtin.command:
+    argv:
+      - lsinitrd
+      - -m
+      - "/boot/initramfs-{{ ansible_facts['kernel'] }}.img"
+  register: system_snapshots_initramfs_modules
+  changed_when: false
+  failed_when: false
+  when: system_snapshots_initramfs.stat.exists
+
+- name: Start drift list
+  ansible.builtin.set_fact:
+    system_snapshots_drift: []
+
+- name: Compare Dracut module files with repository copies
+  ansible.builtin.set_fact:
+    system_snapshots_drift: >-
+      {{ system_snapshots_drift +
+         [item ~ ': ' ~ ('MISSING on system'
+            if not system_snapshots_dracut_installed.results[idx].stat.exists
+            else 'DIFFERS from repository copy')] }}
+  loop: "{{ system_snapshots_dracut_files }}"
+  loop_control:
+    index_var: idx
+  when: >-
+    not system_snapshots_dracut_installed.results[idx].stat.exists
+    or system_snapshots_dracut_installed.results[idx].stat.checksum
+    != system_snapshots_dracut_repo.results[idx].stat.checksum
+
+- name: Compare Dracut configuration with expected line
+  ansible.builtin.set_fact:
+    system_snapshots_drift: >-
+      {{ system_snapshots_drift +
+         ['dracut config ' ~ system_snapshots_expected.dracut_config ~ ': expected line not found'] }}
+  when: >-
+    not system_snapshots_dracut_config.stat.exists
+    or system_snapshots_dracut_config_line not in
+    ((system_snapshots_dracut_config_content.content | b64decode).splitlines() | map('trim') | list)
+
+- name: Compare grub-btrfs configuration with expected lines
+  ansible.builtin.set_fact:
+    system_snapshots_drift: >-
+      {{ system_snapshots_drift +
+         ['grub-btrfs config: expected line not found: ' ~ item] }}
+  loop: "{{ system_snapshots_grub_btrfs_expected_lines }}"
+  when: >-
+    not system_snapshots_grub_btrfs_config.stat.exists
+    or item not in
+    ((system_snapshots_grub_btrfs_config_content.content | b64decode).splitlines() | map('trim') | list)
+
+- name: Check that the running kernel initramfs contains the overlayfs module
+  ansible.builtin.set_fact:
+    system_snapshots_drift: >-
+      {{ system_snapshots_drift +
+         ['initramfs of ' ~ ansible_facts['kernel'] ~ ': overlayfs module not listed (or initramfs unreadable)'] }}
+  when: >-
+    not system_snapshots_initramfs.stat.exists
+    or system_snapshots_initramfs_modules.rc | default(1) != 0
+    or 'overlayfs' not in system_snapshots_initramfs_modules.stdout | default('')
+
+- name: Report configuration drift
+  ansible.builtin.debug:
+    msg: >-
+      {{ ['No drift found: managed files and expected settings match.']
+         if system_snapshots_drift | length == 0
+         else ['DRIFT FOUND (nothing was changed):'] + system_snapshots_drift }}
+
 - name: Report current snapshot boot configuration
   ansible.builtin.debug:
     msg:
