@@ -1,0 +1,17 @@
+---
+- name: Audit Fedora snapshot boot configuration
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  become: true
+
+  tasks:
+    - name: Ensure this playbook runs on Fedora
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['distribution'] == 'Fedora'
+        fail_msg: "This playbook is intended for Fedora."
+
+    - name: Audit snapshot boot configuration
+      ansible.builtin.import_role:
+        name: system_snapshots

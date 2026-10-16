@@ -1,0 +1,68 @@
+---
+- name: Ensure audit-only mode is enabled
+  ansible.builtin.assert:
+    that:
+      - system_snapshots_audit_only | bool
+    fail_msg: >-
+      This initial role is audit-only. Do not disable audit-only mode
+      until change tasks have been reviewed and explicitly approved.
+
+- name: Check Snapper configuration
+  ansible.builtin.command:
+    argv:
+      - snapper
+      - list-configs
+  register: system_snapshots_snapper_configs
+  changed_when: false
+  failed_when: false
+
+- name: Check grub-btrfs service state
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - "{{ system_snapshots_expected.grub_btrfs_service }}"
+  register: system_snapshots_grub_btrfs_active
+  changed_when: false
+  failed_when: false
+
+- name: Check grub-btrfs service enablement
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-enabled
+      - "{{ system_snapshots_expected.grub_btrfs_service }}"
+  register: system_snapshots_grub_btrfs_enabled
+  changed_when: false
+  failed_when: false
+
+- name: Validate GRUB configuration syntax
+  ansible.builtin.command:
+    argv:
+      - grub2-script-check
+      - "{{ system_snapshots_expected.grub_config }}"
+  register: system_snapshots_grub_syntax
+  changed_when: false
+  failed_when: false
+
+- name: Check custom Dracut module directory
+  ansible.builtin.stat:
+    path: "{{ system_snapshots_expected.dracut_module_dir }}"
+  register: system_snapshots_dracut_module_dir
+
+- name: Check custom Dracut configuration
+  ansible.builtin.stat:
+    path: "{{ system_snapshots_expected.dracut_config }}"
+  register: system_snapshots_dracut_config
+
+- name: Report current snapshot boot configuration
+  ansible.builtin.debug:
+    msg:
+      - "Snapper config query rc={{ system_snapshots_snapper_configs.rc }}"
+      - "Snapper configs: {{ system_snapshots_snapper_configs.stdout | default('') }}"
+      - "grub-btrfs active: {{ system_snapshots_grub_btrfs_active.stdout | default('unknown') }}"
+      - "grub-btrfs enabled: {{ system_snapshots_grub_btrfs_enabled.stdout | default('unknown') }}"
+      - "GRUB syntax check rc={{ system_snapshots_grub_syntax.rc }}"
+      - "Custom Dracut module directory exists: {{ system_snapshots_dracut_module_dir.stat.exists }}"
+      - "Custom Dracut config exists: {{ system_snapshots_dracut_config.stat.exists }}"
+      - "Audit only: no system configuration changes were requested by this role."

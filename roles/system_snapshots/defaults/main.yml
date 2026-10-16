@@ -1,0 +1,9 @@
+---
+system_snapshots_audit_only: true
+
+system_snapshots_expected:
+  snapper_config: root
+  grub_btrfs_service: grub-btrfsd.service
+  grub_config: /boot/grub2/grub.cfg
+  dracut_module_dir: /usr/lib/dracut/modules.d/69overlayfs
+  dracut_config: /etc/dracut.conf.d/20-overlayfs.conf
