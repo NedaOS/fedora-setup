@@ -115,6 +115,20 @@
               {{ failed_steps | default([]) +
               ['Fedora packages: ' ~ (ansible_failed_result.msg | default('unknown error') | string | truncate(160))] }}
 
+    - name: Fedora package groups
+      when: (package_groups | default(group_packages | default([]))) | length > 0
+      block:
+        - name: Install Fedora package groups
+          ansible.builtin.dnf:
+            name: "{{ (package_groups | default(group_packages | default([]))) | map('regex_replace', '^@?', '@') | list }}"
+            state: present
+      rescue:
+        - name: Record failed step (Fedora package groups)
+          ansible.builtin.set_fact:
+            failed_steps: >-
+              {{ failed_steps | default([]) +
+              ['Fedora package groups: ' ~ (ansible_failed_result.msg | default('unknown error') | string | truncate(160))] }}
+
     - name: COPR packages
       block:
         - name: Install COPR packages

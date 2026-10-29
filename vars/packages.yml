@@ -35,10 +35,13 @@ pure_packages:
   - make
   - quickshell
   - nautilus
-  - iwlwifi-mvm-firmware
   - snapper
   - btrfs-assistant
   - libdnf5-plugin-actions
+  - okular
+
+package_groups:
+  - hardware-support
 
 copr_packages:
   - hyprland
