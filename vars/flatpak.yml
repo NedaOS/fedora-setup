@@ -3,3 +3,4 @@ flatpak_applications:
   - it.mijorus.gearlever
   - md.obsidian.Obsidian
   - org.telegram.desktop
+  - org.localsend.localsend_app
