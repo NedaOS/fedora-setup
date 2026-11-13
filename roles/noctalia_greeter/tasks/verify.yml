@@ -111,3 +111,28 @@
   ansible.builtin.assert:
     that:
       - noctalia_greeter_boot_target.stdout == 'graphical.target'
+
+- name: Inspect obsolete SDDM configuration locations
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - /etc/sddm.conf
+    - /etc/sddm.conf.rpmsave
+    - /etc/sddm.conf.d
+    - /etc/sddm.conf.d␍
+    - /etc/sddm
+    - /usr/share/sddm
+    - /etc/sddm.conf.d/99-ryoku.conf
+    - /usr/share/sddm/themes
+    - /var/lib/sddm/state.conf
+  register: noctalia_greeter_sddm_residue
+
+- name: Require reviewed SDDM residue cleanup
+  ansible.builtin.assert:
+    that:
+      - not item.stat.exists
+    fail_msg: "Obsolete SDDM path needs ownership review and cleanup: {{ item.item }}"
+  loop: "{{ noctalia_greeter_sddm_residue.results }}"
+  loop_control:
+    label: "{{ item.item }}"

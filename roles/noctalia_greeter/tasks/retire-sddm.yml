@@ -1,0 +1,24 @@
+---
+- name: Gather packages for SDDM retirement
+  ansible.builtin.package_facts:
+    manager: auto
+
+- name: Require explicit transaction approval on existing SDDM installations
+  ansible.builtin.assert:
+    that:
+      - noctalia_greeter_sddm_removal_approved | default(false) | bool
+      - ansible_facts.services.get('sddm.service', {}).get('state', 'stopped') != 'running'
+    fail_msg: >-
+      Review dnf remove --assumeno --setopt=clean_requirements_on_remove=False
+      sddm sddm-wayland-generic and confirm TTY recovery first. Then explicitly
+      set noctalia_greeter_sddm_removal_approved=true. Never remove an active manager.
+  when: "'sddm' in ansible_facts.packages or 'sddm-wayland-generic' in ansible_facts.packages"
+
+- name: Remove only obsolete display manager packages without dependency cleanup
+  ansible.builtin.dnf:
+    name:
+      - sddm
+      - sddm-wayland-generic
+    state: absent
+    autoremove: false
+    conf_file: /etc/dnf/dnf.conf

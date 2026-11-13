@@ -96,3 +96,6 @@
         force: true
         owner: root
         group: root
+
+- name: Retire obsolete display manager packages after configuring greetd
+  ansible.builtin.import_tasks: retire-sddm.yml

@@ -47,8 +47,10 @@
               if (expected_packages | difference(ansible_facts.packages.keys() | list)) | length > 0 else [])
             + (['greetd.service is not enabled']
               if ansible_facts.services['greetd.service'].status | default('absent') != 'enabled' else [])
-            + (['sddm.service is enabled and conflicts with greetd']
-              if ansible_facts.services['sddm.service'].status | default('absent') == 'enabled' else [])
+            + (['greetd.service is not running']
+              if ansible_facts.services.get('greetd.service', {}).get('state', '') != 'running' else [])
+            + (['Obsolete SDDM packages remain installed']
+              if ('sddm' in ansible_facts.packages or 'sddm-wayland-generic' in ansible_facts.packages) else [])
             + (manual_tool_stats.results
               | selectattr('item.enabled')
               | rejectattr('stat.exists')

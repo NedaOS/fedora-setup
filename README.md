@@ -2,9 +2,6 @@
 
 Ansible setup for a personal Fedora 44 + Hyprland system.
 
-Graphical login uses greetd and Noctalia Greeter, with the existing quiet
-Hyprland session. See [installation, verification, and TTY recovery](docs/noctalia-greeter.md).
-
 ## Reinstall
 
 Supported platform: **Fedora 44 only**. `bootstrap.sh` exits with an error on any other distribution or Fedora release before changing anything.
