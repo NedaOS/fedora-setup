@@ -24,6 +24,13 @@
           Supported: Fedora {{ supported_fedora_releases | join(", ") }}.
           Detected: {{ ansible_facts["distribution"] }} {{ ansible_facts["distribution_major_version"] }}.
 
+    - name: Keep two install-only package versions for safe kernel upgrades
+      ansible.builtin.ini_file:
+        path: /etc/dnf/dnf.conf
+        section: main
+        option: installonly_limit
+        value: '2'
+
     - name: Repository management prerequisites
       block:
         - name: Install repository management prerequisites
@@ -170,6 +177,74 @@
             failed_steps: >-
               {{ failed_steps | default([]) +
               ['vendor packages: ' ~ (ansible_failed_result.msg | default('unknown error') | string | truncate(160))] }}
+
+    - name: Read the running kernel
+      ansible.builtin.command:
+        argv:
+          - uname
+          - -r
+      register: running_kernel
+      changed_when: false
+      check_mode: false
+
+    - name: List installed kernel versions
+      ansible.builtin.command:
+        argv:
+          - dnf5
+          - repoquery
+          - --installed
+          - --queryformat
+          - '%{version}-%{release}.%{arch}\n'
+          - kernel-core
+      register: installed_kernels
+      changed_when: false
+      check_mode: false
+
+    - name: Read the newest installed kernel version
+      ansible.builtin.command:
+        argv:
+          - dnf5
+          - repoquery
+          - --installed
+          - --latest-limit=1
+          - --queryformat
+          - '%{version}-%{release}.%{arch}\n'
+          - kernel-core
+      register: newest_kernel
+      changed_when: false
+      check_mode: false
+
+    - name: Require the running kernel to be installed
+      ansible.builtin.assert:
+        that:
+          - running_kernel.stdout | length > 0
+          - newest_kernel.stdout | length > 0
+          - running_kernel.stdout in installed_kernels.stdout_lines
+        fail_msg: >-
+          The running kernel ({{ running_kernel.stdout }}) is not an installed kernel-core
+          package. Kernel cleanup was not attempted.
+
+    - name: Explain why old kernels are retained until reboot
+      ansible.builtin.debug:
+        msg: >-
+          Skipping kernel cleanup: the running kernel ({{ running_kernel.stdout }}) is not
+          the newest installed kernel ({{ newest_kernel.stdout }}). Reboot into the newer
+          kernel before running this playbook again.
+      when: running_kernel.stdout != newest_kernel.stdout
+
+    - name: Remove old install-only packages after rebooting into the newest kernel
+      ansible.builtin.command:
+        argv:
+          - dnf5
+          - remove
+          - --oldinstallonly
+          - --limit=1
+          - --assumeyes
+      when:
+        - not ansible_check_mode
+        - running_kernel.stdout == newest_kernel.stdout
+        - installed_kernels.stdout_lines | length > 1
+      changed_when: true
 
     - name: Flatpak
       block:
