@@ -1,172 +1,63 @@
 ---
-- name: Ensure audit-only mode is enabled
+- name: Require read-only Fedora 44 snapshot auditing
   ansible.builtin.assert:
     that:
       - system_snapshots_audit_only | bool
+      - ansible_facts['distribution'] == 'Fedora'
+      - ansible_facts['distribution_major_version'] == '44'
+    fail_msg: This role only supports read-only auditing of the existing Fedora 44 architecture.
+
+- name: Read repository Dracut references
+  ansible.builtin.set_fact:
+    system_snapshots_references: >-
+      {{ system_snapshots_references | default({}) | combine(
+        {item: lookup('ansible.builtin.file', role_path ~ '/files/dracut/69overlayfs/' ~ item,
+                      rstrip=false)}) }}
+  loop: "{{ system_snapshots_dracut_files }}"
+
+# Execute controller-side source directly: no helper is installed on the host.
+# command runs in check mode too; the helper only reads files and invokes queries.
+- name: Inspect snapshot policies and boot artifacts without changing them
+  ansible.builtin.command:
+    argv:
+      - "{{ system_snapshots_python }}"
+      - -c
+      - "{{ lookup('ansible.builtin.file', role_path ~ '/files/audit.py') }}"
+    stdin: >-
+      {{ {'expected': system_snapshots_expected,
+          'policy': system_snapshots_snapper_policy,
+          'timers': system_snapshots_timers,
+          'dracut_files': system_snapshots_dracut_files,
+          'grub_settings': system_snapshots_grub_btrfs_settings,
+          'kernel': ansible_facts['kernel'],
+          'timeout': system_snapshots_command_timeout,
+          'reference_files': system_snapshots_references} | to_json }}
+  register: system_snapshots_probe
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Require a completed audit probe
+  ansible.builtin.assert:
+    that:
+      - system_snapshots_probe.rc == 0
     fail_msg: >-
-      This initial role is audit-only. Do not disable audit-only mode
-      until change tasks have been reviewed and explicitly approved.
+      Snapshot audit could not complete. Check Python, privileges and configured paths.
+      {{ system_snapshots_probe.stderr | default('No diagnostic returned') }}
 
-- name: Check Snapper configuration
-  ansible.builtin.command:
-    argv:
-      - snapper
-      - list-configs
-  register: system_snapshots_snapper_configs
-  changed_when: false
-  failed_when: false
-
-- name: Check grub-btrfs service state
-  ansible.builtin.command:
-    argv:
-      - systemctl
-      - is-active
-      - "{{ system_snapshots_expected.grub_btrfs_service }}"
-  register: system_snapshots_grub_btrfs_active
-  changed_when: false
-  failed_when: false
-
-- name: Check grub-btrfs service enablement
-  ansible.builtin.command:
-    argv:
-      - systemctl
-      - is-enabled
-      - "{{ system_snapshots_expected.grub_btrfs_service }}"
-  register: system_snapshots_grub_btrfs_enabled
-  changed_when: false
-  failed_when: false
-
-- name: Validate GRUB configuration syntax
-  ansible.builtin.command:
-    argv:
-      - grub2-script-check
-      - "{{ system_snapshots_expected.grub_config }}"
-  register: system_snapshots_grub_syntax
-  changed_when: false
-  failed_when: false
-
-- name: Check custom Dracut module directory
-  ansible.builtin.stat:
-    path: "{{ system_snapshots_expected.dracut_module_dir }}"
-  register: system_snapshots_dracut_module_dir
-
-- name: Check custom Dracut configuration
-  ansible.builtin.stat:
-    path: "{{ system_snapshots_expected.dracut_config }}"
-  register: system_snapshots_dracut_config
-
-- name: Checksum installed custom Dracut module files
-  ansible.builtin.stat:
-    path: "{{ system_snapshots_expected.dracut_module_dir }}/{{ item }}"
-    checksum_algorithm: sha256
-  loop: "{{ system_snapshots_dracut_files }}"
-  register: system_snapshots_dracut_installed
-
-- name: Checksum repository copies of the Dracut module files
-  ansible.builtin.stat:
-    path: "{{ role_path }}/files/dracut/69overlayfs/{{ item }}"
-    checksum_algorithm: sha256
-  loop: "{{ system_snapshots_dracut_files }}"
-  register: system_snapshots_dracut_repo
-
-- name: Check grub-btrfs configuration file
-  ansible.builtin.stat:
-    path: "{{ system_snapshots_expected.grub_btrfs_config }}"
-  register: system_snapshots_grub_btrfs_config
-
-- name: Read Dracut configuration
-  ansible.builtin.slurp:
-    src: "{{ system_snapshots_expected.dracut_config }}"
-  register: system_snapshots_dracut_config_content
-  when: system_snapshots_dracut_config.stat.exists
-
-- name: Read grub-btrfs configuration
-  ansible.builtin.slurp:
-    src: "{{ system_snapshots_expected.grub_btrfs_config }}"
-  register: system_snapshots_grub_btrfs_config_content
-  when: system_snapshots_grub_btrfs_config.stat.exists
-
-- name: Check initramfs of the running kernel
-  ansible.builtin.stat:
-    path: "/boot/initramfs-{{ ansible_facts['kernel'] }}.img"
-  register: system_snapshots_initramfs
-
-- name: List Dracut modules inside the running kernel initramfs
-  ansible.builtin.command:
-    argv:
-      - lsinitrd
-      - -m
-      - "/boot/initramfs-{{ ansible_facts['kernel'] }}.img"
-  register: system_snapshots_initramfs_modules
-  changed_when: false
-  failed_when: false
-  when: system_snapshots_initramfs.stat.exists
-
-- name: Start drift list
+- name: Decode snapshot audit findings
   ansible.builtin.set_fact:
-    system_snapshots_drift: []
+    system_snapshots_report: "{{ system_snapshots_probe.stdout | from_json }}"
 
-- name: Compare Dracut module files with repository copies
-  ansible.builtin.set_fact:
-    system_snapshots_drift: >-
-      {{ system_snapshots_drift +
-         [item ~ ': ' ~ ('MISSING on system'
-            if not system_snapshots_dracut_installed.results[idx].stat.exists
-            else 'DIFFERS from repository copy')] }}
-  loop: "{{ system_snapshots_dracut_files }}"
-  loop_control:
-    index_var: idx
-  when: >-
-    not system_snapshots_dracut_installed.results[idx].stat.exists
-    or system_snapshots_dracut_installed.results[idx].stat.checksum
-    != system_snapshots_dracut_repo.results[idx].stat.checksum
-
-- name: Compare Dracut configuration with expected line
-  ansible.builtin.set_fact:
-    system_snapshots_drift: >-
-      {{ system_snapshots_drift +
-         ['dracut config ' ~ system_snapshots_expected.dracut_config ~ ': expected line not found'] }}
-  when: >-
-    not system_snapshots_dracut_config.stat.exists
-    or system_snapshots_dracut_config_line not in
-    ((system_snapshots_dracut_config_content.content | b64decode).splitlines() | map('trim') | list)
-
-- name: Compare grub-btrfs configuration with expected lines
-  ansible.builtin.set_fact:
-    system_snapshots_drift: >-
-      {{ system_snapshots_drift +
-         ['grub-btrfs config: expected line not found: ' ~ item] }}
-  loop: "{{ system_snapshots_grub_btrfs_expected_lines }}"
-  when: >-
-    not system_snapshots_grub_btrfs_config.stat.exists
-    or item not in
-    ((system_snapshots_grub_btrfs_config_content.content | b64decode).splitlines() | map('trim') | list)
-
-- name: Check that the running kernel initramfs contains the overlayfs module
-  ansible.builtin.set_fact:
-    system_snapshots_drift: >-
-      {{ system_snapshots_drift +
-         ['initramfs of ' ~ ansible_facts['kernel'] ~ ': overlayfs module not listed (or initramfs unreadable)'] }}
-  when: >-
-    not system_snapshots_initramfs.stat.exists
-    or system_snapshots_initramfs_modules.rc | default(1) != 0
-    or 'overlayfs' not in system_snapshots_initramfs_modules.stdout | default('')
-
-- name: Report configuration drift
+- name: Report snapshot audit evidence and limitations
   ansible.builtin.debug:
-    msg: >-
-      {{ ['No drift found: managed files and expected settings match.']
-         if system_snapshots_drift | length == 0
-         else ['DRIFT FOUND (nothing was changed):'] + system_snapshots_drift }}
+    var: system_snapshots_report
 
-- name: Report current snapshot boot configuration
-  ansible.builtin.debug:
-    msg:
-      - "Snapper config query rc={{ system_snapshots_snapper_configs.rc }}"
-      - "Snapper configs: {{ system_snapshots_snapper_configs.stdout | default('') }}"
-      - "grub-btrfs active: {{ system_snapshots_grub_btrfs_active.stdout | default('unknown') }}"
-      - "grub-btrfs enabled: {{ system_snapshots_grub_btrfs_enabled.stdout | default('unknown') }}"
-      - "GRUB syntax check rc={{ system_snapshots_grub_syntax.rc }}"
-      - "Custom Dracut module directory exists: {{ system_snapshots_dracut_module_dir.stat.exists }}"
-      - "Custom Dracut config exists: {{ system_snapshots_dracut_config.stat.exists }}"
-      - "Audit only: no system configuration changes were requested by this role."
+- name: Require safe and consistent snapshot boot configuration
+  ansible.builtin.assert:
+    that:
+      - system_snapshots_report.errors | length == 0
+    fail_msg: >-
+      Read-only snapshot audit failed; nothing was repaired.
+      {{ system_snapshots_report.errors | join(' | ') }}
+    success_msg: Static snapshot checks passed. Snapshot boot and persistent recovery remain untested.

@@ -4,6 +4,11 @@
   connection: local
   gather_facts: true
   become: true
+  gather_subset:
+    - '!all'
+    - '!min'
+    - distribution
+    - kernel
 
   tasks:
     - name: Ensure this playbook runs on Fedora
@@ -15,4 +20,4 @@
 
     - name: Audit snapshot boot configuration
       ansible.builtin.import_role:
-        name: system_snapshots
+        name: "{{ playbook_dir }}/../roles/system_snapshots"

@@ -1,0 +1,44 @@
+---
+# This role never repairs the host. Differences are fatal audit findings.
+system_snapshots_audit_only: true
+system_snapshots_python: /usr/bin/python3
+system_snapshots_command_timeout: 60
+system_snapshots_expected:
+  snapper_config: root
+  snapper_subvolume: /
+  snapper_config_file: /etc/snapper/configs/root
+  grub_btrfs_service: grub-btrfsd.service
+  grub_config: /boot/grub2/grub.cfg
+  grub_btrfs_config: /etc/default/grub-btrfs/config
+  grub_btrfs_menu: /boot/grub2/grub-btrfs.cfg
+  boot_dir: /boot
+  dracut_module_dir: /usr/lib/dracut/modules.d/69overlayfs
+  dracut_config: /etc/dracut.conf.d/20-overlayfs.conf
+system_snapshots_snapper_policy:
+  SUBVOLUME: /
+  FSTYPE: btrfs
+  TIMELINE_CREATE: 'yes'
+  TIMELINE_CLEANUP: 'yes'
+  NUMBER_CLEANUP: 'yes'
+  EMPTY_PRE_POST_CLEANUP: 'yes'
+  NUMBER_MIN_AGE: '3600'
+  NUMBER_LIMIT: '20'
+  NUMBER_LIMIT_IMPORTANT: '5'
+  TIMELINE_MIN_AGE: '3600'
+  TIMELINE_LIMIT_HOURLY: '5'
+  TIMELINE_LIMIT_DAILY: '7'
+  TIMELINE_LIMIT_WEEKLY: '4'
+  TIMELINE_LIMIT_MONTHLY: '3'
+  TIMELINE_LIMIT_QUARTERLY: '0'
+  TIMELINE_LIMIT_YEARLY: '0'
+system_snapshots_timers:
+  - snapper-timeline.timer
+  - snapper-cleanup.timer
+system_snapshots_dracut_files:
+  - module-setup.sh
+  - prepare-overlayfs.sh
+  - mount-overlayfs.sh
+system_snapshots_grub_btrfs_settings:
+  GRUB_BTRFS_SNAPSHOT_KERNEL_PARAMETERS: rd.live.overlay.overlayfs=1
+  GRUB_BTRFS_GRUB_DIRNAME: /boot/grub2
+  GRUB_BTRFS_SCRIPT_CHECK: grub2-script-check

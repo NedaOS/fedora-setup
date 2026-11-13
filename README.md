@@ -64,3 +64,5 @@ ansible-playbook -i localhost, -c local playbooks/<file name>.yml
 ansible-lint playbooks vars
 shellcheck bootstrap.sh
 ```
+
+Snapshot recovery configuration has a [read-only audit playbook and test guide](docs/system-snapshots.md).
