@@ -1,0 +1,9 @@
+[terminal]
+# The VT to run the greeter on. Can be "next", "current" or a number
+# designating the VT.
+vt = {{ noctalia_greeter_vt }}
+
+# The default session, also known as the greeter.
+[default_session]
+command = {{ noctalia_greeter_session_command | to_json }}
+user = {{ noctalia_greeter_user | to_json }}

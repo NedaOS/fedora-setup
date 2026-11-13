@@ -2,6 +2,9 @@
 
 Ansible setup for a personal Fedora 44 + Hyprland system.
 
+Graphical login uses greetd and Noctalia Greeter, with the existing quiet
+Hyprland session. See [installation, verification, and TTY recovery](docs/noctalia-greeter.md).
+
 ## Reinstall
 
 Supported platform: **Fedora 44 only**. `bootstrap.sh` exits with an error on any other distribution or Fedora release before changing anything.
@@ -25,7 +28,7 @@ git/ansible-core (nothing can run without them).
 ## Verify
 
 ```bash
-ansible-playbook -i localhost, playbooks/verify.yml
+ansible-playbook -i localhost, playbooks/verify.yml --ask-become-pass
 ```
 
 ## Layout
@@ -44,6 +47,7 @@ ansible-playbook -i localhost, playbooks/verify.yml
 | COPR `lihaohong/yazi` | yazi | Same |
 | RPM Fusion free/nonfree | ffmpeg, kmod-v4l2loopback | Codecs / kernel module |
 | Brave, Microsoft (VS Code) | brave-browser, code | Vendor repositories |
+| Terra | noctalia-greeter | Source of the inspected working greeter package |
 
 Re-check periodically: `dnf repoquery --qf '%{name} %{version} %{repoid}' hyprland yazi`.
 

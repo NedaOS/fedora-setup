@@ -11,6 +11,14 @@ rpmfusion:
   enabled: true
 
 vendor_repositories:
+  terra:
+    enabled: true
+    repo_id: terra
+    description: Terra $releasever
+    metalink: https://tetsudou.fyralabs.com/metalink?repo=terra$releasever&arch=$basearch
+    gpg_key_url: https://repos.fyralabs.com/terra44/key.asc
+    package: noctalia-greeter
+
   brave:
     enabled: true
     repo_id: brave-browser

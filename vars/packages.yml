@@ -15,7 +15,8 @@ pure_packages:
   - tar
   - tree
   - ugrep
-  - sddm
+  - greetd
+  - greetd-selinux
   - google-noto-sans-fonts
   - google-noto-emoji-fonts
   - google-noto-color-emoji-fonts
@@ -34,6 +35,7 @@ pure_packages:
   - golang
   - make
   - quickshell
+  - noctalia
   - nautilus
   - snapper
   - btrfs-assistant

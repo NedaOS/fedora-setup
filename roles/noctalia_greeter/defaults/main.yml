@@ -1,0 +1,19 @@
+---
+# Observed on Fedora 44; re-inspect packages and paths before adding another release.
+noctalia_greeter_user: greetd
+noctalia_greeter_group: greetd
+noctalia_greeter_desktop_user: "{{ lookup('env', 'SUDO_USER') | default(lookup('env', 'USER'), true) }}"
+noctalia_greeter_state_dir: /var/lib/noctalia-greeter
+noctalia_greeter_config_path: /etc/greetd/config.toml
+noctalia_greeter_session_command: /usr/bin/noctalia-greeter-session
+noctalia_greeter_quiet_wrapper: /usr/local/bin/hyprland-quiet-session
+noctalia_greeter_quiet_desktop: /usr/local/share/wayland-sessions/hyprland-quiet.desktop
+noctalia_greeter_quiet_session_name: Hyprland (Quiet)
+noctalia_greeter_hyprland_start: /usr/bin/start-hyprland
+noctalia_greeter_vt: 1
+noctalia_greeter_output:
+  name: eDP-1
+  width: 1920
+  height: 1080
+  refresh_rate: 60
+  scale: 1.6

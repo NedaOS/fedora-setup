@@ -87,7 +87,8 @@
           ansible.builtin.yum_repository:
             name: "{{ item.value.repo_id }}"
             description: "{{ item.value.description }}"
-            baseurl: "{{ item.value.baseurl }}"
+            baseurl: "{{ item.value.baseurl | default(omit) }}"
+            metalink: "{{ item.value.metalink | default(omit) }}"
             enabled: true
             gpgcheck: true
             gpgkey: "{{ item.value.gpg_key_url }}"
@@ -192,6 +193,18 @@
             failed_steps: >-
               {{ failed_steps | default([]) +
               ['Flatpak: ' ~ (ansible_failed_result.msg | default('unknown error') | string | truncate(160))] }}
+
+    - name: Noctalia Greeter
+      block:
+        - name: Configure the graphical login
+          ansible.builtin.import_role:
+            name: noctalia_greeter
+      rescue:
+        - name: Record failed step (Noctalia Greeter)
+          ansible.builtin.set_fact:
+            failed_steps: >-
+              {{ failed_steps | default([]) +
+              ['Noctalia Greeter: ' ~ (ansible_failed_result.msg | default('unknown error') | string | truncate(160))] }}
 
     - name: Report steps that did not complete
       ansible.builtin.fail:

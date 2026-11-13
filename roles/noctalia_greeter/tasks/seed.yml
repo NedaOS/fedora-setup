@@ -1,0 +1,31 @@
+---
+- name: Check whether Noctalia already owns mutable Sync state
+  ansible.builtin.stat:
+    path: "{{ noctalia_greeter_state_dir }}/sync.toml"
+  register: noctalia_greeter_sync_stat
+
+- name: Initialize appearance for the first login
+  when: not noctalia_greeter_sync_stat.stat.exists
+  block:
+    - name: Seed the captured wallpapers without replacing existing images
+      ansible.builtin.copy:
+        src: wallpaper.jpg
+        dest: "{{ noctalia_greeter_state_dir }}/{{ item }}"
+        owner: "{{ noctalia_greeter_user }}"
+        group: "{{ noctalia_greeter_group }}"
+        mode: "0644"
+        force: false
+      loop:
+        - wallpaper.jpg
+        - wallpaper-eDP-1.jpg
+
+    - name: Seed captured Sync appearance without replacing runtime state
+      ansible.builtin.template:
+        src: sync.toml.j2
+        dest: "{{ noctalia_greeter_state_dir }}/sync.toml"
+        owner: "{{ noctalia_greeter_user }}"
+        group: "{{ noctalia_greeter_group }}"
+        mode: "0644"
+        force: false
+        validate: >-
+          /usr/bin/python3 -c 'import sys,tomllib; tomllib.load(open(sys.argv[1], "rb"))' %s

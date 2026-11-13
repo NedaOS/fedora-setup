@@ -1,0 +1,9 @@
+---
+- name: Reproduce the working Noctalia graphical login
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: true
+
+  roles:
+    - noctalia_greeter

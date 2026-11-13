@@ -1,0 +1,85 @@
+---
+- name: Ensure administrator configuration directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ noctalia_greeter_config_path | dirname }}"
+    - "{{ noctalia_greeter_quiet_wrapper | dirname }}"
+    - "{{ noctalia_greeter_quiet_desktop | dirname }}"
+
+- name: Preserve the greeter state directory ownership and access
+  ansible.builtin.file:
+    path: "{{ noctalia_greeter_state_dir }}"
+    state: directory
+    owner: "{{ noctalia_greeter_user }}"
+    group: "{{ noctalia_greeter_group }}"
+    mode: "0750"
+
+- name: Configure the administrator-controlled greeter settings
+  ansible.builtin.template:
+    src: greeter.toml.j2
+    dest: "{{ noctalia_greeter_state_dir }}/greeter.toml"
+    owner: "{{ noctalia_greeter_user }}"
+    group: "{{ noctalia_greeter_group }}"
+    mode: "0644"
+    backup: true
+    validate: >-
+      /usr/bin/python3 -c 'import sys,tomllib; tomllib.load(open(sys.argv[1], "rb"))' %s
+
+- name: Seed appearance only when Sync state is missing
+  ansible.builtin.import_tasks: seed.yml
+
+- name: Install the quiet Hyprland wrapper
+  ansible.builtin.template:
+    src: hyprland-quiet-session.j2
+    dest: "{{ noctalia_greeter_quiet_wrapper }}"
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+    validate: /usr/bin/sh -n %s
+
+- name: Install the quiet session desktop entry
+  ansible.builtin.template:
+    src: hyprland-quiet.desktop.j2
+    dest: "{{ noctalia_greeter_quiet_desktop }}"
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    # DesktopNames is a session key that desktop-file-validate rejects.
+    validate: >-
+      /usr/bin/python3 -c 'import configparser,sys; p=configparser.ConfigParser(interpolation=None); p.read_file(open(sys.argv[1]))' %s
+
+- name: Configure greetd
+  ansible.builtin.template:
+    src: greetd-config.toml.j2
+    dest: "{{ noctalia_greeter_config_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: >-
+      /usr/bin/python3 -c 'import sys,tomllib; tomllib.load(open(sys.argv[1], "rb"))' %s
+
+- name: Ensure the desktop Noctalia configuration directory exists
+  ansible.builtin.file:
+    path: "{{ noctalia_greeter_desktop_home }}/.config/noctalia"
+    state: directory
+    owner: "{{ noctalia_greeter_desktop_user }}"
+    group: "{{ noctalia_greeter_desktop_group }}"
+    mode: "0755"
+
+- name: Preserve Noctalia greeter auto-sync defaults
+  ansible.builtin.template:
+    src: greeter-sync.toml.j2
+    dest: "{{ noctalia_greeter_desktop_home }}/.config/noctalia/greeter-sync.toml"
+    owner: "{{ noctalia_greeter_desktop_user }}"
+    group: "{{ noctalia_greeter_desktop_group }}"
+    mode: "0644"
+    backup: true
+    validate: /usr/bin/noctalia config validate %s

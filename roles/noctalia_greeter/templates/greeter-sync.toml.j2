@@ -1,0 +1,17 @@
+# Defaults captured from the working Noctalia settings. GUI settings can override these.
+[shell]
+polkit_agent = true
+
+[shell.greeter_sync]
+auto_sync = true
+
+[theme]
+mode = "dark"
+source = "wallpaper"
+wallpaper_scheme = "m3-tonal-spot"
+
+[wallpaper.default]
+path = {{ (noctalia_greeter_desktop_home ~ '/Pictures/Wallpapers/river.jpg') | to_json }}
+
+[wallpaper.monitors.{{ noctalia_greeter_output.name | to_json }}]
+path = {{ (noctalia_greeter_desktop_home ~ '/Pictures/Wallpapers/river.jpg') | to_json }}

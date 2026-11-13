@@ -1,0 +1,98 @@
+---
+- name: Require the inspected Fedora release
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] == 'Fedora'
+      - ansible_facts['distribution_major_version'] == '44'
+      - noctalia_greeter_desktop_user != 'root'
+    fail_msg: >-
+      This configuration was inspected on Fedora 44. Review package names, paths,
+      and the greeter config format before supporting another release.
+      Run as your desktop user with --ask-become-pass, or set noctalia_greeter_desktop_user.
+
+- name: Look up the packaged greeter account
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ noctalia_greeter_user }}"
+
+- name: Look up the desktop account
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ noctalia_greeter_desktop_user }}"
+
+- name: Resolve the desktop home directory
+  ansible.builtin.set_fact:
+    noctalia_greeter_desktop_home: "{{ ansible_facts.getent_passwd[noctalia_greeter_desktop_user][4] }}"
+    noctalia_greeter_desktop_group: "{{ ansible_facts.getent_passwd[noctalia_greeter_desktop_user][2] }}"
+
+- name: Inspect the installed session launchers
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ noctalia_greeter_session_command }}"
+    - "{{ noctalia_greeter_hyprland_start }}"
+    - /usr/bin/noctalia-greeter
+    - /usr/bin/noctalia-greeter-compositor
+    - /usr/bin/noctalia-greeter-apply-appearance
+    - /usr/bin/noctalia
+    - /usr/bin/kdeconnectd
+  register: noctalia_greeter_launchers
+
+- name: Require the expected package layout before writing login configuration
+  ansible.builtin.assert:
+    that:
+      - item.stat.isreg | default(false)
+      - item.stat.executable | default(false)
+      - item.stat.uid | default(-1) == 0
+      - item.stat.mode | default('') in ['0755', '0555']
+    fail_msg: >-
+      Missing or unexpected executable: {{ item.item }}. Install packages with
+      default-install.yml first; inspect package/path changes before proceeding.
+  loop: "{{ noctalia_greeter_launchers.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Inspect the current display manager alias
+  ansible.builtin.stat:
+    path: /etc/systemd/system/display-manager.service
+    follow: false
+  register: noctalia_greeter_display_manager
+
+- name: Require a known display manager handoff
+  ansible.builtin.assert:
+    that:
+      - >-
+        not noctalia_greeter_display_manager.stat.exists
+        or (noctalia_greeter_display_manager.stat.islnk | default(false)
+        and noctalia_greeter_display_manager.stat.lnk_source | basename in ['greetd.service', 'sddm.service'])
+    fail_msg: "Unexpected display-manager.service. Inspect it before changing boot enablement."
+
+- name: Configure login files without changing running services
+  ansible.builtin.import_tasks: configure.yml
+
+- name: Configure the display manager for the next boot
+  tags: noctalia_greeter_services
+  block:
+    - name: Gather installed services
+      ansible.builtin.service_facts:
+
+    - name: Disable SDDM for subsequent boots
+      ansible.builtin.systemd_service:
+        name: sddm.service
+        enabled: false
+      when: "'sddm.service' in ansible_facts.services"
+
+    - name: Enable greetd without starting or restarting it
+      ansible.builtin.systemd_service:
+        name: greetd.service
+        enabled: true
+        force: true
+
+    - name: Select graphical login for subsequent boots
+      ansible.builtin.file:
+        src: /usr/lib/systemd/system/graphical.target
+        dest: /etc/systemd/system/default.target
+        state: link
+        force: true
+        owner: root
+        group: root

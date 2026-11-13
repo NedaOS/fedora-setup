@@ -1,0 +1,113 @@
+---
+- name: Look up the desktop account for verification
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ noctalia_greeter_desktop_user }}"
+
+- name: Resolve the desktop home for verification
+  ansible.builtin.set_fact:
+    noctalia_greeter_desktop_home: "{{ ansible_facts.getent_passwd[noctalia_greeter_desktop_user][4] }}"
+
+- name: Inspect the greeter state directory
+  ansible.builtin.stat:
+    path: "{{ noctalia_greeter_state_dir }}"
+  register: noctalia_greeter_state_stat
+
+- name: Verify state directory ownership and permissions
+  ansible.builtin.assert:
+    that:
+      - noctalia_greeter_state_stat.stat.isdir | default(false)
+      - noctalia_greeter_state_stat.stat.pw_name | default('') == noctalia_greeter_user
+      - noctalia_greeter_state_stat.stat.gr_name | default('') == noctalia_greeter_group
+      - noctalia_greeter_state_stat.stat.mode | default('') == '0750'
+
+- name: Read administrator-controlled login files
+  ansible.builtin.slurp:
+    src: "{{ item.path }}"
+  loop:
+    - path: "{{ noctalia_greeter_config_path }}"
+      template: greetd-config.toml.j2
+    - path: "{{ noctalia_greeter_quiet_wrapper }}"
+      template: hyprland-quiet-session.j2
+    - path: "{{ noctalia_greeter_quiet_desktop }}"
+      template: hyprland-quiet.desktop.j2
+    - path: "{{ noctalia_greeter_state_dir }}/greeter.toml"
+      template: greeter.toml.j2
+    - path: "{{ noctalia_greeter_desktop_home }}/.config/noctalia/greeter-sync.toml"
+      template: greeter-sync.toml.j2
+  loop_control:
+    label: "{{ item.path }}"
+  register: noctalia_greeter_managed_files
+
+- name: Compare managed files with their templates
+  ansible.builtin.assert:
+    that:
+      - item.content | b64decode == lookup('ansible.builtin.template', item.item.template)
+    fail_msg: "Configuration drift: {{ item.item.path }}"
+  loop: "{{ noctalia_greeter_managed_files.results }}"
+  loop_control:
+    label: "{{ item.item.path }}"
+
+- name: Inspect the display manager alias
+  ansible.builtin.stat:
+    path: /etc/systemd/system/display-manager.service
+    follow: false
+  register: noctalia_greeter_verify_alias
+
+- name: Verify greetd owns the display manager alias
+  ansible.builtin.assert:
+    that:
+      - noctalia_greeter_verify_alias.stat.islnk | default(false)
+      - noctalia_greeter_verify_alias.stat.lnk_source | default('') | basename == 'greetd.service'
+
+- name: Check that mutable state and referenced wallpapers are accessible to greetd
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - |
+        import os, sys, tomllib
+        from pathlib import Path
+        for name in ('greeter.toml', 'sync.toml'):
+            path = Path(sys.argv[1]) / name
+            data = tomllib.loads(path.read_text())
+            assert os.access(path, os.W_OK), f'{path} is not writable'
+            appearance = data.get('appearance', {})
+            wallpapers = [appearance.get('wallpaper', {}), *appearance.get('wallpapers', {}).values()]
+            for wallpaper in wallpapers:
+                image = wallpaper.get('path', '')
+                if image and not image.startswith('color:'):
+                    with open(image, 'rb') as stream:
+                        assert stream.read(1), f'{image} is empty'
+      - "{{ noctalia_greeter_state_dir }}"
+  become_user: "{{ noctalia_greeter_user }}"
+  changed_when: false
+  check_mode: false
+
+- name: List the installed desktop sessions
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/noctalia-greeter
+      - sessions
+  register: noctalia_greeter_sessions
+  changed_when: false
+  check_mode: false
+
+- name: Verify the quiet session is discoverable
+  ansible.builtin.assert:
+    that:
+      - noctalia_greeter_quiet_session_name in noctalia_greeter_sessions.stdout_lines
+
+- name: Read the default boot target
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - get-default
+  register: noctalia_greeter_boot_target
+  changed_when: false
+  check_mode: false
+
+- name: Verify graphical login is selected for boot
+  ansible.builtin.assert:
+    that:
+      - noctalia_greeter_boot_target.stdout == 'graphical.target'

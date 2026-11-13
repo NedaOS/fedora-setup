@@ -1,0 +1,3 @@
+#!/bin/sh
+mkdir -p "$HOME/.local/state"
+exec {{ noctalia_greeter_hyprland_start | quote }} >>"$HOME/.local/state/hyprland-startup.log" 2>&1
