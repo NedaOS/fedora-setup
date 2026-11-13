@@ -1,11 +1,11 @@
 ---
-- name: Require read-only Fedora 44 snapshot auditing
+- name: Require read-only Fedora 45 snapshot auditing
   ansible.builtin.assert:
     that:
       - system_snapshots_audit_only | bool
       - ansible_facts['distribution'] == 'Fedora'
-      - ansible_facts['distribution_major_version'] == '44'
-    fail_msg: This role only supports read-only auditing of the existing Fedora 44 architecture.
+      - ansible_facts['distribution_major_version'] == '45'
+    fail_msg: This role only supports read-only auditing of the existing Fedora 45 architecture.
 
 - name: Read repository Dracut references
   ansible.builtin.set_fact:

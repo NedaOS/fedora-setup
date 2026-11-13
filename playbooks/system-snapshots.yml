@@ -15,8 +15,8 @@
       ansible.builtin.assert:
         that:
           - ansible_facts['distribution'] == 'Fedora'
-          - ansible_facts['distribution_major_version'] == '44'
-        fail_msg: "This playbook is intended for Fedora 44."
+          - ansible_facts['distribution_major_version'] == '45'
+        fail_msg: "This playbook is intended for Fedora 45."
 
     - name: Audit snapshot boot configuration
       ansible.builtin.import_role:

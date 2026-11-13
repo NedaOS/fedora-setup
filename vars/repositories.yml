@@ -1,6 +1,6 @@
 ---
 supported_fedora_releases:
-  - "44"
+  - "45"
 
 copr_repositories:
   - name: lionheartp/Hyprland
@@ -16,7 +16,7 @@ vendor_repositories:
     repo_id: terra
     description: Terra $releasever
     metalink: https://tetsudou.fyralabs.com/metalink?repo=terra$releasever&arch=$basearch
-    gpg_key_url: https://repos.fyralabs.com/terra44/key.asc
+    gpg_key_url: https://repos.fyralabs.com/terra45/key.asc
     package: noctalia-greeter
 
   brave:

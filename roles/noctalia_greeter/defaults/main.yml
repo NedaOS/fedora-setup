@@ -1,5 +1,5 @@
 ---
-# Observed on Fedora 44; re-inspect packages and paths before adding another release.
+# Observed on Fedora; re-inspect packages and paths before adding another release.
 noctalia_greeter_user: greetd
 noctalia_greeter_group: greetd
 noctalia_greeter_desktop_user: "{{ lookup('env', 'SUDO_USER') | default(lookup('env', 'USER'), true) }}"

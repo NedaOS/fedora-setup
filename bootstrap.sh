@@ -5,8 +5,8 @@ REPO_URL="https://github.com/NedaOS/fedora-setup.git"
 CHEZMOI_REPO_URL="https://github.com/NedaOS/live-dotfiles.git"
 REPO_DIR="${FEDORA_SETUP_DIR:-${HOME}/Ansible}"
 
-# The only supported platform: Fedora 44. Anything else is rejected before any change is made.
-SUPPORTED_FEDORA_VERSION="44"
+# The only supported platform: Fedora 45. Anything else is rejected before any change is made.
+SUPPORTED_FEDORA_VERSION="45"
 
 log() {
   printf '\n[bootstrap] %s\n' "$*"

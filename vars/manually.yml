@@ -4,9 +4,9 @@ cliamp:
 
 onionhop_cli:
   enabled: true
-  version: "3.8.6"
-  sha256: "1c8e354d6e294f0924185ec764113c874a48c4675e3e15b6cf1ef56b643eddac"
+  version: "3.11"
+  sha256: "86a14b095a3aadfc4587275ce26415f066212f64323f3734fb76f91ddde65941"
 
 fnm:
   enabled: true
-  node_version: "24.21.0"
+  node_version: "26.13.1"

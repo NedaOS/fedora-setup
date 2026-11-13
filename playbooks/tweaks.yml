@@ -5,12 +5,12 @@
   become: false
   gather_facts: true
 
+  vars_files:
+    - ../vars/tweaks.yml
+
   vars:
-    obs_recording_path: "{{ ansible_facts['user_dir'] }}/Videos"
     obs_config_path: "{{ ansible_facts['user_dir'] }}/.config/obs-studio/basic/profiles/Untitled/basic.ini"
 
-    nerd_font_version: "v3.4.0"
-    nerd_font_name: "JetBrainsMono"
     fonts_dir: "{{ ansible_facts['user_dir'] }}/.local/share/fonts"
     nerd_font_dir: "{{ fonts_dir }}/{{ nerd_font_name }}-{{ nerd_font_version }}"
     nerd_font_archive: "{{ ansible_facts['user_dir'] }}/{{ nerd_font_name }}-{{ nerd_font_version }}.tar.xz"

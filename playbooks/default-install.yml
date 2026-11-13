@@ -34,9 +34,9 @@
     - name: Repository management prerequisites
       block:
         - name: Install repository management prerequisites
-          ansible.builtin.dnf:
+          ansible.builtin.dnf5:
             name:
-              - dnf-plugins-core
+              - dnf5-plugins
               - flatpak
             state: present
       rescue:
@@ -50,7 +50,7 @@
       when: rpmfusion.enabled | bool
       block:
         - name: Enable RPM Fusion repositories
-          ansible.builtin.dnf:
+          ansible.builtin.dnf5:
             name:
               - "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"
               - "https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm"
@@ -65,9 +65,15 @@
     - name: COPR repositories
       block:
         - name: Enable COPR repositories
-          community.general.copr:
-            name: "{{ item.name }}"
-            state: enabled
+          ansible.builtin.command:
+            argv:
+              - dnf5
+              - copr
+              - enable
+              - --assumeyes
+              - "{{ item.name }}"
+            creates: >-
+              /etc/yum.repos.d/_copr:copr.fedorainfracloud.org:{{ item.name | replace('/', ':') }}.repo
           loop: "{{ copr_repositories }}"
           register: copr_result
           retries: 3
@@ -113,7 +119,7 @@
     - name: Fedora packages
       block:
         - name: Install Fedora packages
-          ansible.builtin.dnf:
+          ansible.builtin.dnf5:
             name: "{{ pure_packages }}"
             state: present
       rescue:
@@ -127,7 +133,7 @@
       when: (package_groups | default(group_packages | default([]))) | length > 0
       block:
         - name: Install Fedora package groups
-          ansible.builtin.dnf:
+          ansible.builtin.dnf5:
             name: "{{ (package_groups | default(group_packages | default([]))) | map('regex_replace', '^@?', '@') | list }}"
             state: present
       rescue:
@@ -140,7 +146,7 @@
     - name: COPR packages
       block:
         - name: Install COPR packages
-          ansible.builtin.dnf:
+          ansible.builtin.dnf5:
             name: "{{ copr_packages }}"
             state: present
       rescue:
@@ -154,7 +160,7 @@
       when: rpmfusion.enabled | bool
       block:
         - name: Install RPM Fusion packages
-          ansible.builtin.dnf:
+          ansible.builtin.dnf5:
             name: "{{ rpmfusion_packages }}"
             state: present
       rescue:
@@ -168,7 +174,7 @@
       when: enabled_vendor_repositories | length > 0
       block:
         - name: Install vendor packages
-          ansible.builtin.dnf:
+          ansible.builtin.dnf5:
             name: "{{ enabled_vendor_repositories | map(attribute='value.package') | list }}"
             state: present
       rescue:
@@ -177,74 +183,6 @@
             failed_steps: >-
               {{ failed_steps | default([]) +
               ['vendor packages: ' ~ (ansible_failed_result.msg | default('unknown error') | string | truncate(160))] }}
-
-    - name: Read the running kernel
-      ansible.builtin.command:
-        argv:
-          - uname
-          - -r
-      register: running_kernel
-      changed_when: false
-      check_mode: false
-
-    - name: List installed kernel versions
-      ansible.builtin.command:
-        argv:
-          - dnf5
-          - repoquery
-          - --installed
-          - --queryformat
-          - '%{version}-%{release}.%{arch}\n'
-          - kernel-core
-      register: installed_kernels
-      changed_when: false
-      check_mode: false
-
-    - name: Read the newest installed kernel version
-      ansible.builtin.command:
-        argv:
-          - dnf5
-          - repoquery
-          - --installed
-          - --latest-limit=1
-          - --queryformat
-          - '%{version}-%{release}.%{arch}\n'
-          - kernel-core
-      register: newest_kernel
-      changed_when: false
-      check_mode: false
-
-    - name: Require the running kernel to be installed
-      ansible.builtin.assert:
-        that:
-          - running_kernel.stdout | length > 0
-          - newest_kernel.stdout | length > 0
-          - running_kernel.stdout in installed_kernels.stdout_lines
-        fail_msg: >-
-          The running kernel ({{ running_kernel.stdout }}) is not an installed kernel-core
-          package. Kernel cleanup was not attempted.
-
-    - name: Explain why old kernels are retained until reboot
-      ansible.builtin.debug:
-        msg: >-
-          Skipping kernel cleanup: the running kernel ({{ running_kernel.stdout }}) is not
-          the newest installed kernel ({{ newest_kernel.stdout }}). Reboot into the newer
-          kernel before running this playbook again.
-      when: running_kernel.stdout != newest_kernel.stdout
-
-    - name: Remove old install-only packages after rebooting into the newest kernel
-      ansible.builtin.command:
-        argv:
-          - dnf5
-          - remove
-          - --oldinstallonly
-          - --limit=1
-          - --assumeyes
-      when:
-        - not ansible_check_mode
-        - running_kernel.stdout == newest_kernel.stdout
-        - installed_kernels.stdout_lines | length > 1
-      changed_when: true
 
     - name: Flatpak
       block:

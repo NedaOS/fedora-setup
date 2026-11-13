@@ -15,10 +15,9 @@
   when: "'sddm' in ansible_facts.packages or 'sddm-wayland-generic' in ansible_facts.packages"
 
 - name: Remove only obsolete display manager packages without dependency cleanup
-  ansible.builtin.dnf:
+  ansible.builtin.dnf5:
     name:
       - sddm
       - sddm-wayland-generic
     state: absent
     autoremove: false
-    conf_file: /etc/dnf/dnf.conf
