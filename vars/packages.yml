@@ -41,6 +41,7 @@ pure_packages:
   - btrfs-assistant
   - libdnf5-plugin-actions
   - okular
+  - google-noto-fonts-all
 
 package_groups:
   - hardware-support
