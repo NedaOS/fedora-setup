@@ -42,9 +42,9 @@ pure_packages:
   - libdnf5-plugin-actions
   - okular
   - google-noto-fonts-all
-
-package_groups:
-  - hardware-support
+  - "@hardware-support"
+  - NetworkManager-wifi
+  - bluez
 
 copr_packages:
   - hyprland
