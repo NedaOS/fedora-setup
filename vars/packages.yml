@@ -54,3 +54,4 @@ copr_packages:
 
 rpmfusion_packages:
   - ffmpeg
+  - ayugram-desktop
