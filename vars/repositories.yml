@@ -5,7 +5,6 @@ supported_fedora_releases:
 copr_repositories:
   - name: lionheartp/Hyprland
   - name: lihaohong/yazi
-  - name: mkocustos/grub-btrfs
 
 rpmfusion:
   enabled: true

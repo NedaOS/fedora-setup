@@ -24,6 +24,16 @@
           Supported: Fedora {{ supported_fedora_releases | join(", ") }}.
           Detected: {{ ansible_facts["distribution"] }} {{ ansible_facts["distribution_major_version"] }}.
 
+    - name: Disable the broken grub-btrfs COPR repository
+      ansible.builtin.copy:
+        dest: /etc/dnf/repos.override.d/99-fedora-setup-grub-btrfs.repo
+        content: |
+          [copr:copr.fedorainfracloud.org:mkocustos:grub-btrfs]
+          enabled=0
+        owner: root
+        group: root
+        mode: '0644'
+
     - name: Keep two install-only package versions for safe kernel upgrades
       ansible.builtin.ini_file:
         path: /etc/dnf/dnf.conf

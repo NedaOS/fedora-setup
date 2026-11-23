@@ -3,6 +3,7 @@ pure_packages:
   - chezmoi
   - curl
   - git
+  - openssl3-libs
   - fish
   - bat
   - btop
@@ -50,7 +51,6 @@ copr_packages:
   - hyprland
   - hyprland-guiutils
   - yazi
-  - grub-btrfs
 
 rpmfusion_packages:
   - ffmpeg
